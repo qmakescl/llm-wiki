@@ -1,0 +1,44 @@
+# 가상환경
+.venv/
+venv/
+env/
+
+# Python 캐시
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.egg-info/
+dist/
+build/
+*.egg
+
+# 테스트 캐시
+.pytest_cache/
+.coverage
+htmlcov/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 사용자 설정 (로컬 머신에만 존재)
+~/.config/llm-wiki/
+
+# 위키 데이터 (소스 파일 및 생성 콘텐츠)
+workspace/
+*.pdf
+*.pkl
+
+# 환경 변수 파일
+.env
+.env.local
+
+# 의존성 잠금 (선택적 추적)
+# uv.lock  ← 재현성을 위해 추적 권장

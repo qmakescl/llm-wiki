@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}llm-wiki{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/htmx.org@1.9.10" defer></script>
+  <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/sse.js" defer></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #0f0f0f;
+      --bg-card:      #171717;
+      --bg-sidebar:   #111111;
+      --bg-hover:     #1f1f1f;
+      --bg-active:    #252525;
+      --bg-input:     #1a1a1a;
+      --border:       #2a2a2a;
+      --border-light: #222;
+
+      --text:         #f0f0f0;
+      --text-muted:   #6b7280;
+      --text-subtle:  #3f3f3f;
+
+      --accent:       #3b82f6;
+      --success:      #22c55e;
+      --warning:      #f59e0b;
+      --error:        #ef4444;
+
+      --sidebar-w:    220px;
+      --radius:       8px;
+      --radius-sm:    5px;
+      --radius-lg:    12px;
+
+      --font:         'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono:    'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    }
+    [data-theme="light"] {
+      --bg:           #f9fafb;
+      --bg-card:      #ffffff;
+      --bg-sidebar:   #ffffff;
+      --bg-hover:     #f3f4f6;
+      --bg-active:    #ebebeb;
+      --bg-input:     #ffffff;
+      --border:       #e5e7eb;
+      --border-light: #f0f0f0;
+      --text:         #111827;
+      --text-muted:   #6b7280;
+      --text-subtle:  #c0c0c0;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: var(--font);
+      font-size: 14px;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    button, input, select, textarea { font-family: var(--font); }
+
+    /* ── App Shell ── */
+    .app-shell { display: flex; height: 100vh; overflow: hidden; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: var(--sidebar-w);
+      flex-shrink: 0;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 14px;
+      border-bottom: 1px solid var(--border);
+      text-decoration: none;
+      color: var(--text);
+      flex-shrink: 0;
+    }
+    .brand-icon {
+      width: 30px; height: 30px;
+      background: var(--accent);
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+    .brand-name { font-weight: 700; font-size: 14.5px; letter-spacing: -0.3px; }
+
+    .sidebar-nav { flex: 1; overflow-y: auto; padding: 8px; }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      font-size: 13.5px;
+      font-weight: 500;
+      transition: background 0.1s, color 0.1s;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .nav-item:hover { background: var(--bg-hover); color: var(--text); }
+    .nav-item.active { background: var(--bg-active); color: var(--text); }
+    .nav-icon { width: 16px; height: 16px; flex-shrink: 0; }
+
+    .sidebar-footer {
+      padding: 12px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .domain-label {
+      font-size: 10px; font-weight: 600;
+      color: var(--text-subtle); text-transform: uppercase;
+      letter-spacing: 0.7px; display: block; margin-bottom: 5px;
+    }
+    .domain-select {
+      width: 100%;
+      background: var(--bg-input);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 7px 10px;
+      font-size: 12.5px;
+      cursor: pointer;
+      font-family: var(--font);
+      outline: none;
+      transition: border-color 0.15s;
+      margin-bottom: 8px;
+    }
+    .domain-select:hover, .domain-select:focus { border-color: var(--accent); }
+
+    .theme-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 4px 2px;
+    }
+    .theme-row span { font-size: 12px; color: var(--text-muted); }
+    .toggle-pill {
+      background: var(--bg-active);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 3px;
+      cursor: pointer;
+      display: flex; align-items: center;
+      width: 38px; height: 20px;
+      transition: background 0.2s;
+    }
+    .toggle-thumb {
+      width: 13px; height: 13px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      transition: transform 0.2s;
+      flex-shrink: 0;
+    }
+    [data-theme="light"] .toggle-thumb { transform: translateX(17px); }
+
+    /* ── Main Area ── */
+    .main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .content-area { flex: 1; overflow-y: auto; padding: 32px; }
+    .content-inner { max-width: 880px; margin: 0 auto; }
+
+    /* ── Page Header ── */
+    .page-header { margin-bottom: 24px; }
+    .page-header h1 { font-size: 21px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 4px; }
+    .page-header p  { font-size: 13.5px; color: var(--text-muted); }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13.5px; font-weight: 500;
+      border: none; cursor: pointer;
+      transition: opacity 0.15s, background 0.15s;
+      white-space: nowrap;
+      font-family: var(--font);
+    }
+    .btn-primary  { background: var(--text); color: var(--bg); }
+    .btn-primary:hover { opacity: 0.82; }
+    .btn-secondary{ background: var(--bg-active); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { background: var(--bg-hover); }
+    .btn-ghost    { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+    .btn-ghost:hover { background: var(--bg-hover); color: var(--text); }
+    .btn-danger   { background: transparent; color: var(--error); border: 1px solid var(--error); }
+    .btn-danger:hover { background: var(--error); color: #fff; }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* ── Forms ── */
+    .form-field { margin-bottom: 14px; }
+    .form-label { display: block; font-size: 12.5px; font-weight: 500; color: var(--text-muted); margin-bottom: 5px; }
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      background: var(--bg-input);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 9px 12px;
+      font-size: 13.5px;
+      font-family: var(--font);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--accent); }
+    .form-textarea { resize: vertical; min-height: 80px; }
+    .form-hint { font-size: 11.5px; color: var(--text-muted); margin-top: 4px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 13px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .card-title { font-size: 13.5px; font-weight: 600; }
+    .card-body  { padding: 18px; }
+    .card-footer{ padding: 12px 18px; border-top: 1px solid var(--border); }
+
+    /* ── Stat Grid ── */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .stat-num   { font-size: 26px; font-weight: 700; line-height: 1.1; margin-bottom: 4px; }
+    .stat-label { font-size: 11.5px; color: var(--text-muted); }
+
+    /* ── Badges ── */
+    .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 20px;
+      font-size: 11px; font-weight: 600;
+    }
+    .badge-default { background: var(--bg-active); color: var(--text-muted); }
+    .badge-success { background: rgba(34,197,94,0.12);  color: #22c55e; }
+    .badge-warning { background: rgba(245,158,11,0.12); color: #f59e0b; }
+    .badge-error   { background: rgba(239,68,68,0.12);  color: #ef4444; }
+    .badge-info    { background: rgba(59,130,246,0.12); color: #3b82f6; }
+    /* legacy aliases */
+    .badge-ok      { background: rgba(34,197,94,0.12);  color: #22c55e; }
+    .badge-running { background: rgba(59,130,246,0.12); color: #3b82f6; }
+    .badge-failed  { background: rgba(239,68,68,0.12);  color: #ef4444; }
+    .badge-high    { background: rgba(239,68,68,0.12);  color: #ef4444; }
+    .badge-med     { background: rgba(245,158,11,0.12); color: #f59e0b; }
+    .badge-low     { background: var(--bg-active);       color: var(--text-muted); }
+
+    /* ── Progress Log ── */
+    .progress-log {
+      background: #0a0a0a;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.7;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    [data-theme="light"] .progress-log { background: #f4f5f7; }
+    .log-step { color: var(--text-muted); margin: 0; }
+    .log-step:last-child { color: var(--text); }
+    .log-error { color: var(--error) !important; }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 12px 18px;
+      border-radius: var(--radius);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      font-size: 13.5px; z-index: 9999;
+      animation: toastIn 0.25s ease;
+    }
+    @keyframes toastIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+
+    /* ── Job Items ── */
+    .job-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      margin-bottom: 6px;
+      font-size: 12.5px;
+    }
+    .job-item.running { border-color: rgba(59,130,246,0.35); background: rgba(59,130,246,0.04); }
+    .job-item.done    { border-color: rgba(34,197,94,0.35);  background: rgba(34,197,94,0.04);  }
+    .job-item.failed  { border-color: rgba(239,68,68,0.35);  background: rgba(239,68,68,0.04);  }
+
+    /* ── Log Timeline ── */
+    .log-timeline { list-style: none; padding: 0; }
+    .log-timeline li {
+      padding: 7px 0; font-size: 13px; color: var(--text-muted);
+      border-bottom: 1px solid var(--border-light);
+    }
+    .log-timeline li:last-child { border-bottom: none; }
+
+    /* ── Answer Body ── */
+    .answer-body { line-height: 1.75; font-size: 14px; word-break: break-word; }
+    .answer-body h1 { font-size: 19px; font-weight: 700; margin: 18px 0 8px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    .answer-body h2 { font-size: 16px; font-weight: 600; margin: 14px 0 6px; }
+    .answer-body h3 { font-size: 14px; font-weight: 600; margin: 11px 0 5px; }
+    .answer-body p  { margin: 8px 0; }
+    .answer-body ul, .answer-body ol { padding-left: 20px; margin: 8px 0; }
+    .answer-body li { margin: 3px 0; }
+    .answer-body code {
+      background: rgba(255,255,255,0.07);
+      color: #f472b6;
+      padding: 1px 6px; border-radius: 4px;
+      font-size: 0.87em; font-family: var(--font-mono);
+    }
+    [data-theme="light"] .answer-body code { background: #f3f4f6; color: #db2777; }
+    .answer-body pre {
+      background: #0a0a0a;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px; overflow-x: auto; margin: 12px 0;
+    }
+    [data-theme="light"] .answer-body pre { background: #f4f5f7; }
+    .answer-body pre code { background: none; padding: 0; color: inherit; font-size: 12.5px; }
+    .answer-body blockquote {
+      border-left: 3px solid var(--border);
+      margin: 10px 0; padding: 4px 14px;
+      color: var(--text-muted);
+    }
+    .answer-body table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13px; }
+    .answer-body th { background: var(--bg-active); padding: 8px 12px; text-align: left; font-weight: 600; border: 1px solid var(--border); }
+    .answer-body td { padding: 7px 12px; border: 1px solid var(--border); }
+    .answer-body hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+    /* ── Wiki Tags ── */
+    .wiki-entity-tag {
+      display: inline-flex; align-items: center;
+      background: rgba(59,130,246,0.1); color: #60a5fa;
+      border: 1px solid rgba(59,130,246,0.25);
+      padding: 1px 7px; border-radius: 20px;
+      font-size: 12px; font-weight: 500;
+      text-decoration: none; margin: 0 2px;
+      transition: all 0.12s;
+    }
+    .wiki-entity-tag:hover { background: rgba(59,130,246,0.18); border-color: #60a5fa; }
+    [data-theme="light"] .wiki-entity-tag { background: rgba(59,130,246,0.08); color: #2563eb; border-color: rgba(59,130,246,0.3); }
+    .wiki-source-btn {
+      display: inline-flex; align-items: center;
+      background: transparent; color: var(--text-muted);
+      border: 1px solid var(--border);
+      padding: 1px 6px; border-radius: 4px;
+      font-size: 11px; cursor: help; margin: 0 2px;
+      text-decoration: none; transition: all 0.12s;
+    }
+    .wiki-source-btn:hover { color: var(--text); border-color: var(--text-muted); }
+    .source-link-btn { display: none; }
+    em.wikilink { font-style: normal; color: #60a5fa; font-weight: 500; }
+
+    /* ── Domain Card ── */
+    .domain-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px; margin-bottom: 12px;
+      transition: border-color 0.15s;
+    }
+    .domain-card:hover { border-color: #444; }
+    .domain-card.active-domain { border-color: var(--accent); }
+    .domain-path { font-size: 12px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 3px; }
+
+    /* ── Dir Browser ── */
+    .dir-item {
+      padding: 8px 12px; cursor: pointer;
+      font-size: 13px; border-bottom: 1px solid var(--border);
+      transition: background 0.1s; color: var(--text-muted);
+    }
+    .dir-item:last-child { border-bottom: none; }
+    .dir-item:hover { background: var(--bg-hover); color: var(--text); }
+    .dir-item.selected { background: var(--accent); color: #fff; font-weight: 500; }
+
+    /* ── HTMX ── */
+    .htmx-indicator { display: none; }
+    .htmx-request .htmx-indicator,
+    .htmx-request.htmx-indicator { display: inline-flex; align-items: center; gap: 6px; }
+    #drop-zone.drop-active { border-color: var(--accent) !important; background: rgba(59,130,246,0.04) !important; }
+
+    /* ── Misc ── */
+    .ingest-ok  { color: var(--success); font-weight: 600; }
+    .ingest-err { color: var(--error);   font-weight: 600; }
+    .test-ok    { color: var(--success); }
+    .test-error { color: var(--error);   }
+    hr.divider  { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+    .section-title {
+      font-size: 13px; font-weight: 600;
+      color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.5px; margin-bottom: 12px;
+    }
+    .text-muted { color: var(--text-muted); }
+    .mono { font-family: var(--font-mono); }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes slideUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+    .animate-in { animation: slideUp 0.2s ease; }
+    .step-spin { display: inline-block; animation: spin 1s linear infinite; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <a class="sidebar-brand" href="/">
+      <div class="brand-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+      <div class="brand-name">llm-wiki</div>
+    </a>
+
+    <nav class="sidebar-nav">
+      {% set _p = request.url.path %}
+      <a href="/" class="nav-item {% if _p == '/' %}active{% endif %}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        대시보드
+      </a>
+      <a href="/documents" class="nav-item {% if '/documents' in _p %}active{% endif %}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        문서
+      </a>
+      <a href="/query" class="nav-item {% if '/query' in _p %}active{% endif %}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        질문
+      </a>
+      <a href="/synthesis" class="nav-item {% if '/synthesis' in _p %}active{% endif %}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        합성
+      </a>
+      <a href="/lint" class="nav-item {% if '/lint' in _p %}active{% endif %}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        검사
+      </a>
+      <a href="/admin" class="nav-item {% if '/admin' in _p %}active{% endif %}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14M16.24 7.76a6 6 0 0 1 0 8.49M7.76 7.76a6 6 0 0 0 0 8.49"/></svg>
+        관리
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      {% set _nav_domains = get_all_domains() %}
+      {% set _nav_active_id = get_active_domain_id() %}
+      <span class="domain-label">워크스페이스</span>
+      <select class="domain-select" onchange="switchDomain(this)">
+        {% for d in _nav_domains %}
+        <option value="{{ d.id }}" {% if d.id == _nav_active_id %}selected{% endif %}>{{ d.name }}</option>
+        {% else %}
+        <option value="" disabled>위키 없음</option>
+        {% endfor %}
+      </select>
+      <div class="theme-row">
+        <span>다크 모드</span>
+        <button class="toggle-pill" onclick="toggleTheme()" title="테마 전환">
+          <div class="toggle-thumb"></div>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <div class="main-area">
+    <div class="content-area">
+      <div class="content-inner">
+        {% block content %}{% endblock %}
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function switchDomain(sel) {
+  const id = sel.value;
+  if (!id) return;
+  const f = document.createElement('form');
+  f.method = 'post';
+  f.action = '/admin/domains/' + id + '/activate';
+  document.body.appendChild(f);
+  f.submit();
+}
+function toggleTheme() {
+  const html = document.documentElement;
+  const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', next);
+  localStorage.setItem('llmwiki-theme', next);
+}
+(function() {
+  const t = localStorage.getItem('llmwiki-theme');
+  if (t) document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
+</body>
+</html>

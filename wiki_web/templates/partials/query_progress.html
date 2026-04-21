@@ -1,0 +1,104 @@
+<!-- SSE 컨테이너: message/done 이벤트 모두 처리 -->
+<div hx-ext="sse"
+     sse-connect="/query/{{ job_id }}/stream?question={{ question | urlencode }}&save={{ 'true' if save else 'false' }}"
+     id="query-job-{{ job_id }}">
+
+  <!-- 진행 패널 -->
+  <div class="query-progress-panel" id="qpanel-{{ job_id }}">
+    <div class="query-progress-header">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; color:var(--text-muted)"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <span class="q-title">{{ question }}</span>
+      <span class="q-timer" id="qtimer-{{ job_id }}">0s</span>
+    </div>
+    <ul class="query-step-list" id="qsteps-{{ job_id }}">
+      <li id="qstep-index-{{ job_id }}">
+        <span class="step-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><span>위키 인덱스 읽는 중...</span>
+      </li>
+      <li id="qstep-search-{{ job_id }}">
+        <span class="step-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><span>관련 페이지 검색 중...</span>
+      </li>
+      <li id="qstep-llm-{{ job_id }}">
+        <span class="step-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><span>LLM 답변 생성 중...</span>
+      </li>
+      <li id="qstep-finish-{{ job_id }}">
+        <span class="step-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><span>완료</span>
+      </li>
+    </ul>
+  </div>
+
+  <!-- SSE message 수신용 (숨김) -->
+  <div id="qlog-{{ job_id }}" style="display:none"
+       sse-swap="message" hx-swap="beforeend"></div>
+
+  <!-- SSE done: #query-result-area 전체를 결과 카드로 교체 -->
+  <div id="qdone-{{ job_id }}"
+       sse-swap="done"
+       hx-target="#query-result-area"
+       hx-swap="innerHTML"></div>
+
+</div>
+
+<script>
+(function() {
+  var jobId = "{{ job_id }}";
+
+  /* ── 경과 시간 타이머 ── */
+  var startTime = Date.now();
+  var timerEl = document.getElementById('qtimer-' + jobId);
+  var timerInterval = setInterval(function() {
+    if (!document.getElementById('qtimer-' + jobId)) { clearInterval(timerInterval); return; }
+    timerEl.textContent = Math.floor((Date.now() - startTime) / 1000) + 's';
+  }, 1000);
+
+  /* ── 단계 매핑 (run_query emit 키워드 기준) ── */
+  var stepMap = [
+    { key: '인덱스',  id: 'qstep-index-'  + jobId },
+    { key: '페이지',  id: 'qstep-search-' + jobId },
+    { key: 'LLM',     id: 'qstep-llm-'    + jobId },
+    { key: '완료',    id: 'qstep-finish-' + jobId },
+  ];
+  var currentStep = -1;
+
+  var _CHECK_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  var _SPIN_SVG  = '<span class="step-spin"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></span>';
+
+  function markDone(id) {
+    var el = document.getElementById(id);
+    if (el) { el.className = 'step-done'; el.querySelector('.step-icon').innerHTML = _CHECK_SVG; }
+  }
+
+  function activateStep(idx) {
+    if (idx <= currentStep) return;
+    for (var i = 0; i < idx; i++) markDone(stepMap[i].id);
+    var cur = document.getElementById(stepMap[idx].id);
+    if (cur) {
+      cur.className = 'step-active';
+      cur.querySelector('.step-icon').innerHTML = _SPIN_SVG;
+    }
+    currentStep = idx;
+  }
+
+  function allDone() {
+    clearInterval(timerInterval);
+    stepMap.forEach(function(s) { markDone(s.id); });
+    var btn = document.getElementById('query-submit-btn');
+    if (btn) { btn.removeAttribute('aria-busy'); btn.disabled = false; }
+  }
+
+  /* ── SSE 이벤트 리스너 ── */
+  var sseRoot = document.getElementById('query-job-' + jobId);
+  if (sseRoot) {
+    sseRoot.addEventListener('htmx:sseMessage', function(e) {
+      var raw = (e.detail && e.detail.data) ? e.detail.data : '';
+      var text = raw.replace(/<[^>]+>/g, '');  // HTML 태그 제거
+      for (var i = 0; i < stepMap.length; i++) {
+        if (text.indexOf(stepMap[i].key) !== -1) { activateStep(i); break; }
+      }
+    });
+    sseRoot.addEventListener('htmx:sseClose', allDone);
+  }
+
+  // 초기 첫 단계 활성화
+  activateStep(0);
+})();
+</script>

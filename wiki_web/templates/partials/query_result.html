@@ -1,0 +1,28 @@
+<div class="query-result-card">
+  <div class="result-header">
+    <strong>Q. {{ question }}</strong>
+  </div>
+  <div class="result-body answer-body">
+    {{ answer_html | safe }}
+  </div>
+  <div class="result-footer">
+    {% if save %}
+      <span class="badge badge-ok">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        synthesis/ 에 저장됨
+      </span>
+    {% else %}
+      <form hx-post="/query/save"
+            hx-target="#query-result-area"
+            hx-swap="innerHTML"
+            style="display:inline">
+        <input type="hidden" name="question" value="{{ question }}">
+        <textarea name="raw_answer" style="display:none">{{ raw_answer }}</textarea>
+        <button type="submit" class="btn btn-secondary btn-sm">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          synthesis/ 에 저장
+        </button>
+      </form>
+    {% endif %}
+  </div>
+</div>

@@ -1,0 +1,53 @@
+{% if jobs %}
+<div style="margin-bottom:1rem">
+  <div style="font-size:0.82rem; color:var(--pico-muted-color); margin-bottom:0.4rem; font-weight:600">
+    최근 Ingest 작업
+  </div>
+  {% for job in jobs %}
+  <div class="job-item {{ job.status }}">
+    <div style="flex:1; min-width:0">
+      <span style="font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block">
+        {{ job.filename }}
+      </span>
+      <span style="font-size:0.75rem; color:var(--pico-muted-color)">시작: {{ job.started_at }}</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:0.5rem; flex-shrink:0">
+      {% if job.status == "running" %}
+        <span class="badge badge-running">진행 중</span>
+        <a href="#job-{{ job.id }}" style="font-size:0.78rem" onclick="toggleJobLog('{{ job.id }}')">로그 보기</a>
+      {% elif job.status == "done" %}
+        <span class="badge badge-ok">완료 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+      {% else %}
+        <span class="badge badge-failed">실패 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
+        <a href="#job-{{ job.id }}" style="font-size:0.78rem" onclick="toggleJobLog('{{ job.id }}')">오류 보기</a>
+      {% endif %}
+    </div>
+  </div>
+  <!-- 접을 수 있는 로그 영역 (running / failed만 SSE) -->
+  <div id="job-log-wrap-{{ job.id }}" style="display:none; margin-bottom:0.5rem">
+    {% if job.status == "running" %}
+    <div hx-ext="sse" sse-connect="/documents/ingest/{{ job.id }}/stream">
+      <div id="log-{{ job.id }}" class="progress-log"
+           sse-swap="message" hx-swap="beforeend">
+        {% for msg in job.messages %}{{ msg | safe }}{% endfor %}
+      </div>
+      <div id="done-{{ job.id }}" sse-swap="done" hx-swap="innerHTML"
+           style="margin-top:0.4rem; font-size:0.85rem"></div>
+    </div>
+    {% else %}
+    <div class="progress-log">
+      {% for msg in job.messages %}{{ msg | safe }}{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<script>
+  function toggleJobLog(id) {
+    const el = document.getElementById('job-log-wrap-' + id);
+    if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    return false;
+  }
+</script>

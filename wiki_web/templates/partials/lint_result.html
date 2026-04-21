@@ -1,0 +1,43 @@
+{% if error %}
+<p style="display:flex; align-items:center; gap:6px; color:var(--error)">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+  오류: {{ error }}
+</p>
+{% elif not issues %}
+<p class="badge badge-ok" style="padding:0.6rem 1rem; font-size:0.95rem">
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+  위키 상태 양호 — 이슈 없음
+</p>
+{% else %}
+<p style="color:var(--text-muted); font-size:0.85rem">{{ issues|length }}개 이슈 발견</p>
+<figure>
+  <table>
+    <thead>
+      <tr>
+        <th>심각도</th>
+        <th>유형</th>
+        <th>페이지</th>
+        <th>내용</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for issue in issues %}
+      <tr>
+        <td>
+          {% if issue.severity == 'high' %}
+            <span class="badge badge-high">높음</span>
+          {% elif issue.severity == 'medium' %}
+            <span class="badge badge-med">중간</span>
+          {% else %}
+            <span class="badge badge-low">낮음</span>
+          {% endif %}
+        </td>
+        <td><small>{{ issue.type }}</small></td>
+        <td><code style="font-size:0.78rem">{{ issue.page }}</code></td>
+        <td style="font-size:0.85rem">{{ issue.detail }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</figure>
+{% endif %}

@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+{% block title %}관리 — llm-wiki{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>관리</h1>
+  <p>도메인(위키) 추가·삭제·전환 및 환경 설정을 관리합니다.</p>
+</div>
+
+{% if saved %}
+<div class="toast" id="saved-toast" style="display:flex; align-items:center; gap:6px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> 설정이 저장되었습니다</div>
+<script>setTimeout(() => document.getElementById('saved-toast')?.remove(), 3000)</script>
+{% endif %}
+
+{% if error %}
+<div style="color:var(--error); background:rgba(239,68,68,0.07); border:1px solid rgba(239,68,68,0.25); padding:12px 16px; border-radius:var(--radius); margin-bottom:16px; font-size:13.5px;">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; flex-shrink:0"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+  {{ error }}
+</div>
+{% endif %}
+
+<!-- ── 디렉터리 브라우저 모달 ── -->
+<dialog id="dir-browser" style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:0; max-width:500px; width:100%; color:var(--text)">
+  <div style="padding:14px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between">
+    <span style="font-weight:600; font-size:14px">폴더 선택</span>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('dir-browser').close()" style="padding:4px 8px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+  </div>
+  <div style="padding:12px 18px">
+    <div id="dir-breadcrumb" style="font-size:12px; color:var(--text-muted); margin-bottom:8px; font-family:var(--font-mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap"></div>
+    <div id="dir-list" style="max-height:300px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius-sm)"></div>
+  </div>
+  <div style="padding:12px 18px; border-top:1px solid var(--border); display:flex; gap:10px; align-items:center">
+    <code id="dir-selected-display" style="flex:1; font-size:12px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap">선택된 폴더 없음</code>
+    <button type="button" id="dir-confirm-btn" disabled onclick="confirmDir()" class="btn btn-primary btn-sm">선택</button>
+  </div>
+</dialog>
+
+<script>
+let _targetValId, _targetDisplayId, _selectedPath = null;
+
+function openDirBrowser(valId, displayId) {
+  _targetValId = valId; _targetDisplayId = displayId;
+  _selectedPath = null;
+  document.getElementById('dir-selected-display').textContent = '선택된 폴더 없음';
+  document.getElementById('dir-confirm-btn').disabled = true;
+  const cur = document.getElementById(valId)?.value || '/';
+  loadDir(cur);
+  document.getElementById('dir-browser').showModal();
+}
+function loadDir(path) {
+  fetch('/settings/browse?path=' + encodeURIComponent(path))
+    .then(r => r.json()).then(renderDir);
+}
+function renderDir(data) {
+  document.getElementById('dir-breadcrumb').textContent = data.path;
+  const list = document.getElementById('dir-list');
+  list.innerHTML = '';
+  if (data.parent) {
+    const up = document.createElement('div');
+    up.className = 'dir-item';
+    up.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:5px"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>상위 폴더';
+    up.onclick = () => loadDir(data.parent);
+    list.appendChild(up);
+  }
+  data.dirs.forEach(d => {
+    const row = document.createElement('div');
+    row.className = 'dir-item';
+    row.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:6px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>${d.name}`;
+    row.onclick = () => selectDir(d.path, row);
+    row.ondblclick = () => loadDir(d.path);
+    list.appendChild(row);
+  });
+  if (!data.dirs.length && !data.parent)
+    list.innerHTML = '<div style="padding:16px; color:var(--text-muted); font-size:13px; text-align:center">하위 폴더 없음</div>';
+}
+function selectDir(path, row) {
+  document.querySelectorAll('.dir-item.selected').forEach(el => el.classList.remove('selected'));
+  row.classList.add('selected');
+  _selectedPath = path;
+  document.getElementById('dir-selected-display').textContent = path;
+  document.getElementById('dir-confirm-btn').disabled = false;
+}
+function confirmDir() {
+  if (!_selectedPath) return;
+  document.getElementById(_targetValId).value = _selectedPath;
+  const disp = document.getElementById(_targetDisplayId);
+  if (disp) disp.textContent = _selectedPath;
+  document.getElementById('dir-browser').close();
+}
+let _pendingRootForm = null;
+window.confirmDir = confirmDir;
+
+function closeInitModal(id) {
+  const m = document.getElementById('modal-init-' + id);
+  if (m) m.close();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const el = document.getElementById('admin-custom-wrap');
+  if (el && el.dataset.show === 'true') el.style.display = 'block';
+});
+</script>
+
+<!-- ── 글로벌 워크스페이스 ── -->
+<div class="card" style="margin-bottom:14px">
+  <div class="card-header"><span class="card-title">글로벌 워크스페이스 루트</span></div>
+  <div class="card-body">
+    <p style="font-size:13px; color:var(--text-muted); margin-bottom:12px">
+      모든 도메인(위키) 폴더가 저장될 상위 디렉터리입니다.
+    </p>
+    {% if is_workspace_set %}
+    <div style="display:flex; gap:8px; align-items:center">
+      <input class="form-input" type="text" value="{{ workspace_root }}" readonly style="flex:1; font-family:var(--font-mono); font-size:13px; opacity:0.7">
+    </div>
+    {% else %}
+    <form method="post" action="/admin/workspace/update" style="display:flex; gap:8px; align-items:center">
+      <input class="form-input" type="text" name="workspace_root" id="workspace-root-val"
+             required value="{{ workspace_root }}" style="flex:1; font-family:var(--font-mono); font-size:13px"
+             placeholder="예: /Users/me/llm-wikis">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="openDirBrowser('workspace-root-val', null)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> 선택</button>
+      <button type="submit" class="btn btn-primary btn-sm">저장</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── 도메인 목록 ── -->
+<div style="margin-bottom:14px">
+  <div class="section-title">위키 도메인 목록</div>
+
+  {% for d in domains %}
+  <div class="domain-card {% if d.is_active %}active-domain{% endif %}">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap">
+      {% if d.is_active %}
+      <span class="badge badge-success"><svg width="7" height="7" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="currentColor"/></svg> 활성</span>
+      {% endif %}
+      {% if not d.initialized %}
+      <span class="badge badge-warning">미초기화</span>
+      {% endif %}
+      <strong style="font-size:14px">{{ d.name }}</strong>
+    </div>
+
+    <div class="domain-path" style="display:flex; align-items:center; gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>{% if d.initialized %}{{ d.wiki_root }}{% else %}{{ d.folder or d.id }}{% endif %}</div>
+
+    {% if d.initialized %}
+    <div style="display:flex; gap:16px; margin-top:8px; font-size:12px; color:var(--text-muted)">
+      <span style="display:inline-flex; align-items:center; gap:4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>{{ d.total }}페이지</span>
+      <span style="display:inline-flex; align-items:center; gap:4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>소스 {{ d.sources }}</span>
+      <span style="display:inline-flex; align-items:center; gap:4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>엔티티 {{ d.get('entities',0) }}</span>
+      <span style="display:inline-flex; align-items:center; gap:4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>개념 {{ d.get('concepts',0) }}</span>
+    </div>
+    {% endif %}
+
+    <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; align-items:center">
+      {% if not d.is_active %}
+      <form method="post" action="/admin/domains/{{ d.id }}/activate" style="margin:0">
+        <button type="submit" class="btn btn-primary btn-sm">활성화</button>
+      </form>
+      {% endif %}
+
+      <form method="post" action="/admin/domains/{{ d.id }}/rename"
+            style="margin:0; display:flex; gap:6px; align-items:center">
+        <input class="form-input" type="text" name="name" value="{{ d.name }}"
+               style="width:140px; padding:5px 10px; font-size:12.5px">
+        <button type="submit" class="btn btn-ghost btn-sm">이름 변경</button>
+      </form>
+
+      <button type="button" class="btn btn-ghost btn-sm"
+              onclick="document.getElementById('modal-init-{{ d.id }}').showModal()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        위키 초기화
+      </button>
+
+      {% if not d.is_active %}
+      <form method="post" action="/admin/domains/{{ d.id }}/delete"
+            onsubmit="return confirm('도메인 {{ d.name }}을 목록에서 삭제합니다. (파일은 삭제되지 않음)')"
+            style="margin:0; margin-left:auto">
+        <button type="submit" class="btn btn-danger btn-sm">삭제</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 초기화 모달 -->
+  <dialog id="modal-init-{{ d.id }}" style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:0; max-width:400px; width:100%; color:var(--text)">
+    <div style="padding:14px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between">
+      <span style="display:inline-flex; align-items:center; gap:6px; font-weight:600; font-size:14px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>위키 초기화</span>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="closeInitModal('{{ d.id }}')" style="padding:4px 8px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div style="padding:18px">
+      <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px">이 위키를 초기화하거나 기존 데이터를 재설정합니다.</p>
+      <form method="post" action="/admin/domains/{{ d.id }}/init">
+        <div class="form-field">
+          <label class="form-label">연구 도메인 / 주제</label>
+          <input class="form-input" type="text" name="domain_topic" placeholder="예: 딥러닝 연구, 신약 개발">
+        </div>
+        <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; padding:10px 12px; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.2); border-radius:var(--radius-sm); margin-bottom:16px">
+          <input type="checkbox" name="reset" value="1" style="width:14px; height:14px; accent-color:var(--error); cursor:pointer">
+          <span style="color:var(--error)">기존 데이터(wiki/ raw/) 완전 삭제 후 초기화</span>
+        </label>
+        <div style="display:flex; gap:8px; justify-content:flex-end">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('modal-init-{{ d.id }}').close()">취소</button>
+          <button type="submit" class="btn btn-sm {% if d.initialized %}btn-danger{% else %}btn-primary{% endif %}">
+            {% if d.initialized %}재초기화{% else %}초기화{% endif %}
+          </button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  {% else %}
+  <p style="font-size:13.5px; color:var(--text-muted); padding:16px 0">등록된 도메인이 없습니다. 아래에서 새 도메인을 추가하세요.</p>
+  {% endfor %}
+</div>
+
+<!-- ── 새 도메인 추가 ── -->
+<div class="card" style="margin-bottom:14px">
+  <div class="card-header"><span class="card-title">새 도메인 추가</span></div>
+  <div class="card-body">
+    <form method="post" action="/admin/domains/add">
+      <div class="form-field">
+        <label class="form-label">도메인 이름</label>
+        <input class="form-input" type="text" name="name" required placeholder="예: AI 논문 위키">
+        <div class="form-hint">
+          입력한 이름에 따라 <code style="font-family:var(--font-mono); font-size:11.5px">{{ workspace_root }}</code> 하위에 서브 폴더가 자동 생성됩니다.
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">도메인 추가</button>
+    </form>
+  </div>
+</div>
+
+<!-- ── 시스템 설정 ── -->
+<div class="card" style="margin-bottom:14px">
+  <div class="card-header"><span class="card-title">시스템 설정</span></div>
+  <div class="card-body">
+    <form method="post" action="/admin/settings" style="display:flex; flex-direction:column; gap:14px">
+
+      <div>
+        <div class="section-title" style="margin-bottom:10px">LLM 모델</div>
+        <div class="form-field">
+          <label class="form-label">모델 선택</label>
+          <select class="form-select" name="model" id="admin-model-select"
+                  onchange="document.getElementById('admin-custom-wrap').style.display = this.value === '__custom__' ? 'block' : 'none'">
+            {% for value, label in model_presets %}
+            <option value="{{ value }}" {% if (value == cfg.model) or (value == '__custom__' and is_custom) %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div id="admin-custom-wrap" style="display:none"
+             data-show="{{ 'true' if is_custom else 'false' }}">
+          <div class="form-field">
+            <label class="form-label">커스텀 모델 ID</label>
+            <input class="form-input" type="text" name="model_custom"
+                   value="{{ cfg.model if is_custom else '' }}"
+                   placeholder="예: ollama/codellama, openai/gpt-4-turbo">
+            <div class="form-hint">litellm 형식: provider/model-name</div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title" style="margin-bottom:10px">API 키</div>
+        <div class="form-row" style="margin-bottom:14px">
+          <div class="form-field" style="margin:0">
+            <label class="form-label">Anthropic API Key</label>
+            <input class="form-input" type="password" name="anthropic_api_key" value="{{ cfg.anthropic_api_key }}" placeholder="sk-ant-...">
+          </div>
+          <div class="form-field" style="margin:0">
+            <label class="form-label">OpenAI API Key</label>
+            <input class="form-input" type="password" name="openai_api_key" value="{{ cfg.openai_api_key }}" placeholder="sk-...">
+          </div>
+        </div>
+        <div class="form-field">
+          <label class="form-label">Ollama 서버 URL</label>
+          <input class="form-input" type="text" name="ollama_base_url" value="{{ cfg.ollama_base_url }}" placeholder="http://localhost:11434">
+          <div class="form-hint">로컬 Ollama 서버 주소 (LM Studio 등도 동일 형식)</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:12px">
+          <button type="button" class="btn btn-ghost btn-sm"
+                  hx-get="/settings/test-model"
+                  hx-target="#model-test-result"
+                  hx-swap="innerHTML">
+            연결 테스트
+          </button>
+          <span id="model-test-result" style="font-size:13px"></span>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title" style="margin-bottom:10px">검색 방식</div>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          {% for value, label in search_tiers %}
+          <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; font-size:13.5px">
+            <input type="radio" name="search_tier" value="{{ value }}"
+                   {% if cfg.search_tier == value %}checked{% endif %}
+                   style="width:14px; height:14px; accent-color:var(--accent); margin-top:2px; cursor:pointer; flex-shrink:0">
+            <span>{{ label }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div>
+        <button type="submit" class="btn btn-primary btn-sm">설정 저장</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── 시스템 정보 ── -->
+<div class="card">
+  <div class="card-header"><span class="card-title">시스템 정보</span></div>
+  <div class="card-body">
+    <table style="font-size:13px; border-collapse:collapse; width:100%">
+      <tr>
+        <td style="color:var(--text-muted); padding:6px 16px 6px 0; width:100px">설정 파일</td>
+        <td><code style="font-family:var(--font-mono); font-size:12.5px; color:var(--text-muted)">{{ config_path }}</code></td>
+      </tr>
+      <tr>
+        <td style="color:var(--text-muted); padding:6px 16px 6px 0">등록 도메인</td>
+        <td>{{ domains|length }}개</td>
+      </tr>
+    </table>
+  </div>
+</div>
+{% endblock %}

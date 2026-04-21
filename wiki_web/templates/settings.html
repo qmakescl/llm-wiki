@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}설정 — llm-wiki{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>설정</h1>
+  <p>LLM 모델, API 키, 검색 방식을 설정합니다. 위키 경로 및 도메인 관리는 <a href="/admin" style="color:var(--accent)">관리 페이지</a>에서 할 수 있습니다.</p>
+</div>
+
+{% if saved %}
+<div class="toast" id="saved-toast" style="display:flex; align-items:center; gap:6px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> 설정이 저장되었습니다</div>
+<script>setTimeout(() => document.getElementById('saved-toast')?.remove(), 3000)</script>
+{% endif %}
+
+<form method="post" action="/settings" style="display:flex; flex-direction:column; gap:14px">
+
+  <!-- LLM 모델 -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">LLM 모델</span></div>
+    <div class="card-body">
+      <div class="form-field">
+        <label class="form-label">모델 선택</label>
+        <select class="form-select" name="model" id="model-select"
+                onchange="document.getElementById('custom-model-wrap').style.display = this.value === '__custom__' ? 'block' : 'none'">
+          {% for value, label in model_presets %}
+          <option value="{{ value }}" {% if (value == cfg.model) or (value == '__custom__' and is_custom) %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div id="custom-model-wrap" style="display:{{ 'block' if is_custom else 'none' }}">
+        <div class="form-field">
+          <label class="form-label">커스텀 모델 ID</label>
+          <input class="form-input" type="text" name="model_custom"
+                 value="{{ cfg.model if is_custom else '' }}"
+                 placeholder="예: ollama/codellama, openai/gpt-4-turbo">
+          <div class="form-hint">litellm 형식: provider/model-name</div>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px; margin-top:4px">
+        <button type="button" class="btn btn-ghost btn-sm"
+                hx-get="/settings/test-model"
+                hx-target="#model-test-result"
+                hx-swap="innerHTML">
+          연결 테스트
+        </button>
+        <span id="model-test-result" style="font-size:13px"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- API 키 -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">API 키</span></div>
+    <div class="card-body">
+      <div class="form-row" style="margin-bottom:14px">
+        <div class="form-field" style="margin:0">
+          <label class="form-label">Anthropic API Key</label>
+          <input class="form-input" type="password" name="anthropic_api_key"
+                 value="{{ cfg.anthropic_api_key }}" placeholder="sk-ant-...">
+        </div>
+        <div class="form-field" style="margin:0">
+          <label class="form-label">OpenAI API Key</label>
+          <input class="form-input" type="password" name="openai_api_key"
+                 value="{{ cfg.openai_api_key }}" placeholder="sk-...">
+        </div>
+      </div>
+      <div class="form-field" style="margin:0">
+        <label class="form-label">Ollama 서버 URL</label>
+        <input class="form-input" type="text" name="ollama_base_url"
+               value="{{ cfg.ollama_base_url }}" placeholder="http://localhost:11434">
+        <div class="form-hint">로컬 Ollama 서버 주소 (LM Studio 등도 동일 형식)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 검색 방식 -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">검색 방식</span></div>
+    <div class="card-body" style="display:flex; flex-direction:column; gap:10px">
+      {% for value, label in search_tiers %}
+      <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; font-size:13.5px">
+        <input type="radio" name="search_tier" value="{{ value }}"
+               {% if cfg.search_tier == value %}checked{% endif %}
+               style="width:14px; height:14px; accent-color:var(--accent); margin-top:2px; cursor:pointer; flex-shrink:0">
+        <span>{{ label }}</span>
+      </label>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- 청킹 전략 -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">문서 청킹 전략</span></div>
+    <div class="card-body" style="display:flex; flex-direction:column; gap:10px">
+      {% for value, label in chunk_strategies %}
+      <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; font-size:13.5px">
+        <input type="radio" name="chunk_strategy" value="{{ value }}"
+               {% if cfg.chunk_strategy == value %}checked{% endif %}
+               onchange="document.getElementById('fixed-chunk-opts').style.display = this.value === 'fixed' ? 'flex' : 'none'"
+               style="width:14px; height:14px; accent-color:var(--accent); margin-top:2px; cursor:pointer; flex-shrink:0">
+        <span>{{ label }}</span>
+      </label>
+      {% endfor %}
+
+      <div id="fixed-chunk-opts"
+           style="display:{{ 'flex' if cfg.chunk_strategy == 'fixed' else 'none' }}; gap:16px; margin-top:4px; padding-top:10px; border-top:1px solid var(--border)">
+        <div class="form-field" style="margin:0; flex:1">
+          <label class="form-label">청크 크기 (글자 수)</label>
+          <input class="form-input" type="number" name="chunk_size" min="100" step="100"
+                 value="{{ cfg.chunk_size or 500 }}">
+          <div class="form-hint">기본값 500자 — 짧은 단락 기준</div>
+        </div>
+        <div class="form-field" style="margin:0; flex:1">
+          <label class="form-label">오버랩 (글자 수)</label>
+          <input class="form-input" type="number" name="chunk_overlap" min="0" step="10"
+                 value="{{ cfg.chunk_overlap if cfg.chunk_overlap is not none else 100 }}">
+          <div class="form-hint">기본값 100자 — 청크 간 문맥 연결</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <button class="btn btn-primary" type="submit">설정 저장</button>
+  </div>
+
+</form>
+{% endblock %}

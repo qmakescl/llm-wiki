@@ -1,0 +1,11 @@
+<div hx-ext="sse" sse-connect="/documents/ingest/{{ job_id }}/stream" style="margin-top:0.25rem">
+     <div style="font-size:0.82rem; color:var(--pico-muted-color); margin-bottom:0.25rem">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <strong>{{ filename }}</strong> — 추출 진행 중...
+     </div>
+     <progress style="margin-bottom:0.5rem"></progress>
+     <div id="log-{{ job_id }}" class="progress-log" sse-swap="message" hx-swap="beforeend">
+     </div>
+     <div id="done-{{ job_id }}" sse-swap="done" hx-swap="innerHTML" style="margin-top:0.4rem; font-size:0.85rem">
+     </div>
+</div>

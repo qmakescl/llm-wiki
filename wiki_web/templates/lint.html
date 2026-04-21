@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}건강 검사 — llm-wiki{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>위키 건강 검사</h1>
+  <p>고아 페이지, TODO 마커, 오래된 페이지, LLM 모순 감지를 실행합니다.</p>
+</div>
+
+<div class="card" style="margin-bottom:20px">
+  <div class="card-body">
+    <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap">
+      <button class="btn btn-primary"
+              hx-post="/lint/run"
+              hx-target="#lint-result"
+              hx-swap="innerHTML"
+              hx-indicator="#lint-spinner">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        검사 실행
+      </button>
+      <span id="lint-spinner" class="htmx-indicator" style="font-size:13px; color:var(--text-muted)">
+        <span class="step-spin">⟳</span> 검사 중... (LLM 호출 포함, 30초~1분 소요)
+      </span>
+    </div>
+    <div style="margin-top:12px; font-size:12.5px; color:var(--text-muted)">
+      <strong style="color:var(--text)">검사 항목:</strong>
+      고아 페이지 &nbsp;·&nbsp; TODO 마커 &nbsp;·&nbsp; 90일 이상 미갱신 &nbsp;·&nbsp; LLM 모순·누락 탐지 (최대 20페이지)
+    </div>
+  </div>
+</div>
+
+<div id="lint-result">
+  {% if issues is not none %}
+    {% include "partials/lint_result.html" %}
+  {% endif %}
+</div>
+{% endblock %}
