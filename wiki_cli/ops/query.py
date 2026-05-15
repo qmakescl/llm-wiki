@@ -13,6 +13,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from wiki_cli import llm, fs, search, search_index
 from wiki_cli.metrics import Metrics
+from wiki_cli.obsidian_sync import trigger_sync
 
 console = Console()
 
@@ -94,6 +95,7 @@ If multiple pages contradict each other, note the contradiction.
 
     if save:
         _save_synthesis(wiki_root, question, answer)
+        trigger_sync(wiki_root)
 
     # ── Log ───────────────────────────────────────────────────────────────
     refs = [str(r.path.relative_to(wiki_root)) for r in results]

@@ -32,6 +32,7 @@ DEFAULTS: dict = {
     "chunk_strategy": "section",
     "chunk_size": 500,
     "chunk_overlap": 100,
+    "obsidian_sync": True,
 }
 
 LLM_PROVIDERS = [
@@ -149,6 +150,8 @@ def apply_env(cfg: dict) -> None:
     os.environ["WIKI_CHUNK_STRATEGY"] = cfg.get("chunk_strategy") or "section"
     os.environ["WIKI_CHUNK_SIZE"] = str(cfg.get("chunk_size") or 500)
     os.environ["WIKI_CHUNK_OVERLAP"] = str(cfg.get("chunk_overlap") or 100)
+
+    os.environ["WIKI_OBSIDIAN_SYNC"] = "on" if cfg.get("obsidian_sync", True) else "off"
 
 
 # ── 도메인 헬퍼 ─────────────────────────────────────────────────────────────
@@ -305,6 +308,7 @@ def save_runtime_settings(
     chunk_strategy: str,
     chunk_size: int,
     chunk_overlap: int,
+    obsidian_sync: bool = True,
 ) -> dict:
     """`/settings`와 `/admin/settings`가 공유하는 저장 로직.
 
@@ -329,6 +333,7 @@ def save_runtime_settings(
         "chunk_strategy": chunk_strategy,
         "chunk_size": size,
         "chunk_overlap": overlap,
+        "obsidian_sync": obsidian_sync,
     })
     save(c)
     apply_env(c)

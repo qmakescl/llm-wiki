@@ -68,6 +68,29 @@ SSE(Server-Sent Events)로 LLM 처리 단계를 실시간 스트리밍합니다.
 `wiki/` 폴더를 Obsidian에서 바로 열 수 있습니다.  
 entity/concept 파일명이 display name 기반이라 `[[위키링크]]`가 자동으로 해결됩니다.
 
+#### remotely-save 자동 동기화
+
+ingest 또는 `wiki query --save` 완료 시 Obsidian의 **remotely-save** 플러그인으로 자동 동기화가 트리거됩니다.
+
+**초기 설정 (1회)**
+
+1. **Vault 열기** — Obsidian에서 `{workspace_root}/wiki/` 디렉터리를 Vault로 열고,  
+   이름이 **`wiki`** 인지 확인합니다 (폴더명이 vault 이름이 됩니다).
+2. **remotely-save 설치** — Obsidian 설정 → 커뮤니티 플러그인 → `remotely-save` 검색 후 설치·활성화.
+3. **동기화 대상 설정** — remotely-save 설정에서 S3·OneDrive·Dropbox 등 원하는 원격 스토리지를 연결하고 연결 테스트를 완료합니다.
+4. **obsidian CLI 설치** — Obsidian 설정 → 커뮤니티 플러그인 → `Obsidian CLI` 설치·활성화  
+   (CLI 없이 obsidian 명령어를 찾지 못하면 동기화를 건너뛰고 경고만 출력합니다).
+
+**동기화 활성화/비활성화**
+
+웹 UI **설정** 페이지 하단 "Obsidian 동기화" 체크박스에서 토글할 수 있습니다.  
+환경변수로 직접 제어하려면:
+
+```bash
+export WIKI_OBSIDIAN_SYNC=off   # 비활성화
+export WIKI_OBSIDIAN_SYNC=on    # 활성화 (기본값)
+```
+
 ---
 
 ## 화면 구성

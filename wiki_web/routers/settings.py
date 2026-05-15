@@ -54,6 +54,7 @@ async def save_settings(
     chunk_strategy: str = Form("section"),
     chunk_size: int = Form(500),
     chunk_overlap: int = Form(100),
+    obsidian_sync: str = Form(""),
 ):
     cfg.save_runtime_settings(
         llm_provider=llm_provider,
@@ -68,6 +69,7 @@ async def save_settings(
         chunk_strategy=chunk_strategy,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
+        obsidian_sync=(obsidian_sync == "on"),
     )
     return RedirectResponse("/settings?saved=1", status_code=303)
 

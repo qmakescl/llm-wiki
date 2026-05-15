@@ -14,6 +14,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from wiki_cli import llm, fs, source_registry, structured_ingest
 from wiki_cli.metrics import Metrics
+from wiki_cli.obsidian_sync import trigger_sync
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -254,6 +255,7 @@ Source filename: {source.name}
         _emit(f"완료: {title}")
         p.update(task, description="완료.", completed=True)
 
+    trigger_sync(wiki_root)
     console.print(f"\n[green]✓[/green] Ingested: [bold]{title}[/bold]")
     console.print(f"  Summary page : wiki/sources/{slug}.md")
     console.print(f"  Log updated  : wiki/log.md")
