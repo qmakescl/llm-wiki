@@ -16,8 +16,18 @@
 
   <!-- LLM 모델 -->
   <div class="card">
-    <div class="card-header"><span class="card-title">LLM 모델</span></div>
+    <div class="card-header"><span class="card-title">LLM 연결</span></div>
     <div class="card-body">
+      <div class="form-field">
+        <label class="form-label">Provider</label>
+        <select class="form-select" name="llm_provider" id="llm-provider"
+                onchange="updateProviderFields()">
+          {% for value, label in llm_providers %}
+          <option value="{{ value }}" {% if cfg.llm_provider == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-hint">Ollama는 localhost와 연구소 내부 서버 URL을 모두 같은 방식으로 연결합니다.</div>
+      </div>
       <div class="form-field">
         <label class="form-label">모델 선택</label>
         <select class="form-select" name="model" id="model-select"
@@ -32,43 +42,60 @@
           <label class="form-label">커스텀 모델 ID</label>
           <input class="form-input" type="text" name="model_custom"
                  value="{{ cfg.model if is_custom else '' }}"
-                 placeholder="예: ollama/codellama, openai/gpt-4-turbo">
-          <div class="form-hint">litellm 형식: provider/model-name</div>
+                 placeholder="예: ollama/gemma4:31b, gemini/gemini-2.5-pro, openrouter/openai/gpt-4o">
+          <div class="form-hint">LiteLLM 형식. provider를 선택하면 Ollama/Google/OpenRouter의 짧은 모델명은 자동 보정됩니다.</div>
         </div>
       </div>
-      <div style="display:flex; align-items:center; gap:12px; margin-top:4px">
-        <button type="button" class="btn btn-ghost btn-sm"
-                hx-get="/settings/test-model"
-                hx-target="#model-test-result"
-                hx-swap="innerHTML">
-          연결 테스트
-        </button>
-        <span id="model-test-result" style="font-size:13px"></span>
-      </div>
-    </div>
-  </div>
 
-  <!-- API 키 -->
-  <div class="card">
-    <div class="card-header"><span class="card-title">API 키</span></div>
-    <div class="card-body">
-      <div class="form-row" style="margin-bottom:14px">
+      <div class="form-field provider-field" data-provider-field="ollama">
+        <label class="form-label">Ollama 서버 URL</label>
+        <input class="form-input" type="text" name="ollama_base_url"
+               value="{{ cfg.ollama_base_url }}" placeholder="http://localhost:11434">
+        <div class="form-hint">예: http://localhost:11434 또는 http://llm-lab.local:11434</div>
+        <div class="form-hint">
+          {% if ollama_models %}
+          감지된 모델: <code style="font-family:var(--font-mono); font-size:11.5px">{{ ollama_models|join(', ') }}</code>
+          {% else %}
+          현재 URL에서 감지된 Ollama 모델이 없습니다.
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="form-row provider-field" data-provider-field="anthropic openrouter custom" style="margin-bottom:14px">
         <div class="form-field" style="margin:0">
           <label class="form-label">Anthropic API Key</label>
           <input class="form-input" type="password" name="anthropic_api_key"
                  value="{{ cfg.anthropic_api_key }}" placeholder="sk-ant-...">
         </div>
         <div class="form-field" style="margin:0">
+          <label class="form-label">OpenRouter API Key</label>
+          <input class="form-input" type="password" name="openrouter_api_key"
+                 value="{{ cfg.openrouter_api_key }}" placeholder="sk-or-...">
+        </div>
+      </div>
+
+      <div class="form-row provider-field" data-provider-field="openai google openrouter custom" style="margin-bottom:14px">
+        <div class="form-field" style="margin:0">
           <label class="form-label">OpenAI API Key</label>
           <input class="form-input" type="password" name="openai_api_key"
                  value="{{ cfg.openai_api_key }}" placeholder="sk-...">
         </div>
+        <div class="form-field" style="margin:0">
+          <label class="form-label">Google API Key</label>
+          <input class="form-input" type="password" name="google_api_key"
+                 value="{{ cfg.google_api_key }}" placeholder="AIza...">
+        </div>
       </div>
-      <div class="form-field" style="margin:0">
-        <label class="form-label">Ollama 서버 URL</label>
-        <input class="form-input" type="text" name="ollama_base_url"
-               value="{{ cfg.ollama_base_url }}" placeholder="http://localhost:11434">
-        <div class="form-hint">로컬 Ollama 서버 주소 (LM Studio 등도 동일 형식)</div>
+
+      <div style="display:flex; align-items:center; gap:12px; margin-top:4px">
+        <button type="button" class="btn btn-ghost btn-sm"
+                hx-post="/settings/test-model"
+                hx-include="closest form"
+                hx-target="#model-test-result"
+                hx-swap="innerHTML">
+          현재 입력값으로 연결 테스트
+        </button>
+        <span id="model-test-result" style="font-size:13px"></span>
       </div>
     </div>
   </div>
@@ -125,4 +152,14 @@
   </div>
 
 </form>
+<script>
+function updateProviderFields() {
+  const provider = document.getElementById('llm-provider')?.value || 'ollama';
+  document.querySelectorAll('.provider-field').forEach((el) => {
+    const providers = (el.dataset.providerField || '').split(/\s+/);
+    el.style.display = providers.includes(provider) ? '' : 'none';
+  });
+}
+document.addEventListener('DOMContentLoaded', updateProviderFields);
+</script>
 {% endblock %}

@@ -53,6 +53,9 @@ function loadDir(path) {
 }
 function renderDir(data) {
   document.getElementById('dir-breadcrumb').textContent = data.path;
+  _selectedPath = data.path;
+  document.getElementById('dir-selected-display').textContent = data.path;
+  document.getElementById('dir-confirm-btn').disabled = false;
   const list = document.getElementById('dir-list');
   list.innerHTML = '';
   if (data.parent) {
@@ -84,8 +87,28 @@ function confirmDir() {
   if (!_selectedPath) return;
   document.getElementById(_targetValId).value = _selectedPath;
   const disp = document.getElementById(_targetDisplayId);
-  if (disp) disp.textContent = _selectedPath;
+  if (disp) {
+    if ("value" in disp) disp.value = _selectedPath;
+    else disp.textContent = _selectedPath;
+  }
   document.getElementById('dir-browser').close();
+}
+function setWorkspaceRoot(path) {
+  document.getElementById('workspace-root-val').value = path;
+  const display = document.getElementById('workspace-root-display');
+  if (display) display.value = path;
+}
+function pickWorkspaceDir() {
+  fetch('/admin/workspace/pick-directory')
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok && data.path) {
+        setWorkspaceRoot(data.path);
+      } else {
+        openDirBrowser('workspace-root-val', 'workspace-root-display');
+      }
+    })
+    .catch(() => openDirBrowser('workspace-root-val', 'workspace-root-display'));
 }
 let _pendingRootForm = null;
 window.confirmDir = confirmDir;
@@ -98,7 +121,16 @@ function closeInitModal(id) {
 document.addEventListener('DOMContentLoaded', function() {
   const el = document.getElementById('admin-custom-wrap');
   if (el && el.dataset.show === 'true') el.style.display = 'block';
+  updateAdminProviderFields();
 });
+
+function updateAdminProviderFields() {
+  const provider = document.getElementById('admin-llm-provider')?.value || 'ollama';
+  document.querySelectorAll('.admin-provider-field').forEach((el) => {
+    const providers = (el.dataset.providerField || '').split(/\s+/);
+    el.style.display = providers.includes(provider) ? '' : 'none';
+  });
+}
 </script>
 
 <!-- ── 글로벌 워크스페이스 ── -->
@@ -114,10 +146,14 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
     {% else %}
     <form method="post" action="/admin/workspace/update" style="display:flex; gap:8px; align-items:center">
-      <input class="form-input" type="text" name="workspace_root" id="workspace-root-val"
-             required value="{{ workspace_root }}" style="flex:1; font-family:var(--font-mono); font-size:13px"
-             placeholder="예: /Users/me/llm-wikis">
-      <button type="button" class="btn btn-ghost btn-sm" onclick="openDirBrowser('workspace-root-val', null)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> 선택</button>
+      <input type="hidden" name="workspace_root" id="workspace-root-val" required value="{{ workspace_root }}">
+      <input class="form-input" type="text" id="workspace-root-display"
+             value="{{ workspace_root if workspace_root else '' }}" readonly
+             style="flex:1; font-family:var(--font-mono); font-size:13px; cursor:pointer"
+             placeholder="폴더를 선택하세요"
+             onclick="pickWorkspaceDir()">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="pickWorkspaceDir()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Finder로 선택</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="openDirBrowser('workspace-root-val', 'workspace-root-display')">직접 탐색</button>
       <button type="submit" class="btn btn-primary btn-sm">저장</button>
     </form>
     {% endif %}
@@ -165,44 +201,45 @@ document.addEventListener('DOMContentLoaded', function() {
         <button type="submit" class="btn btn-ghost btn-sm">이름 변경</button>
       </form>
 
-      <button type="button" class="btn btn-ghost btn-sm"
+      <button type="button" class="btn btn-danger btn-sm"
               onclick="document.getElementById('modal-init-{{ d.id }}').showModal()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        위키 초기화
+        데이터 삭제 및 재초기화
       </button>
 
-      {% if not d.is_active %}
-      <form method="post" action="/admin/domains/{{ d.id }}/delete"
-            onsubmit="return confirm('도메인 {{ d.name }}을 목록에서 삭제합니다. (파일은 삭제되지 않음)')"
+      <form method="post" action="/admin/domains/{{ d.id }}/archive"
+            onsubmit="return confirm('도메인 {{ d.name }}을 아카이브합니다. wiki/data 파일은 보존됩니다.')"
             style="margin:0; margin-left:auto">
-        <button type="submit" class="btn btn-danger btn-sm">삭제</button>
+        <button type="submit" class="btn btn-ghost btn-sm">아카이브</button>
       </form>
-      {% endif %}
+
+      <form method="post" action="/admin/domains/{{ d.id }}/delete"
+            onsubmit="return confirm('도메인 {{ d.name }}을 영구 삭제합니다. 설정과 wiki/data 폴더가 모두 삭제됩니다. 계속할까요?')"
+            style="margin:0">
+        <button type="submit" class="btn btn-danger btn-sm">영구 삭제</button>
+      </form>
     </div>
   </div>
 
-  <!-- 초기화 모달 -->
+  <!-- 재초기화 모달 -->
   <dialog id="modal-init-{{ d.id }}" style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:0; max-width:400px; width:100%; color:var(--text)">
     <div style="padding:14px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between">
-      <span style="display:inline-flex; align-items:center; gap:6px; font-weight:600; font-size:14px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>위키 초기화</span>
+      <span style="display:inline-flex; align-items:center; gap:6px; font-weight:600; font-size:14px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>데이터 삭제 및 재초기화</span>
       <button type="button" class="btn btn-ghost btn-sm" onclick="closeInitModal('{{ d.id }}')" style="padding:4px 8px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div style="padding:18px">
-      <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px">이 위키를 초기화하거나 기존 데이터를 재설정합니다.</p>
-      <form method="post" action="/admin/domains/{{ d.id }}/init">
+      <p style="font-size:13px; color:var(--error); margin-bottom:16px">이 도메인의 wiki/와 data/ 폴더를 완전히 삭제한 뒤 새 기본 구조로 다시 만듭니다.</p>
+      <form method="post" action="/admin/domains/{{ d.id }}/init"
+            onsubmit="return confirm('{{ d.name }}의 기존 위키와 원본 데이터를 완전히 삭제하고 다시 초기화합니다. 계속할까요?')">
         <div class="form-field">
           <label class="form-label">연구 도메인 / 주제</label>
-          <input class="form-input" type="text" name="domain_topic" placeholder="예: 딥러닝 연구, 신약 개발">
+          <input class="form-input" type="text" name="domain_topic" required
+                 value="{{ d.name }}" placeholder="예: 딥러닝 연구, 신약 개발">
         </div>
-        <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; padding:10px 12px; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.2); border-radius:var(--radius-sm); margin-bottom:16px">
-          <input type="checkbox" name="reset" value="1" style="width:14px; height:14px; accent-color:var(--error); cursor:pointer">
-          <span style="color:var(--error)">기존 데이터(wiki/ raw/) 완전 삭제 후 초기화</span>
-        </label>
+        <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px">업로드 원본, 추출 캐시, 생성된 source/entity/concept/synthesis 페이지가 모두 제거됩니다.</p>
         <div style="display:flex; gap:8px; justify-content:flex-end">
           <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('modal-init-{{ d.id }}').close()">취소</button>
-          <button type="submit" class="btn btn-sm {% if d.initialized %}btn-danger{% else %}btn-primary{% endif %}">
-            {% if d.initialized %}재초기화{% else %}초기화{% endif %}
-          </button>
+          <button type="submit" class="btn btn-danger btn-sm">완전 삭제 후 초기화</button>
         </div>
       </form>
     </div>
@@ -213,19 +250,73 @@ document.addEventListener('DOMContentLoaded', function() {
   {% endfor %}
 </div>
 
+<!-- ── 아카이브된 도메인 ── -->
+{% if archived_domains %}
+<div style="margin-bottom:14px">
+  <div class="section-title">아카이브된 도메인</div>
+
+  {% for d in archived_domains %}
+  <div class="domain-card">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap">
+      <span class="badge">아카이브</span>
+      {% if not d.initialized %}
+      <span class="badge badge-warning">미초기화</span>
+      {% endif %}
+      <strong style="font-size:14px">{{ d.name }}</strong>
+      {% if d.archived_at %}
+      <span style="font-size:12px; color:var(--text-muted)">보관일: {{ d.archived_at }}</span>
+      {% endif %}
+    </div>
+
+    <div class="domain-path" style="display:flex; align-items:center; gap:5px">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      {{ d.wiki_root }}
+    </div>
+
+    {% if d.initialized %}
+    <div style="display:flex; gap:16px; margin-top:8px; font-size:12px; color:var(--text-muted)">
+      <span style="display:inline-flex; align-items:center; gap:4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>{{ d.total }}페이지</span>
+      <span style="display:inline-flex; align-items:center; gap:4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>소스 {{ d.sources }}</span>
+      <span style="display:inline-flex; align-items:center; gap:4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>엔티티 {{ d.get('entities',0) }}</span>
+      <span style="display:inline-flex; align-items:center; gap:4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>개념 {{ d.get('concepts',0) }}</span>
+    </div>
+    {% endif %}
+
+    <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; align-items:center">
+      <form method="post" action="/admin/domains/{{ d.id }}/restore" style="margin:0">
+        <button type="submit" class="btn btn-primary btn-sm">복원</button>
+      </form>
+      <form method="post" action="/admin/domains/{{ d.id }}/delete"
+            onsubmit="return confirm('아카이브된 도메인 {{ d.name }}을 영구 삭제합니다. 설정과 wiki/data 폴더가 모두 삭제됩니다. 계속할까요?')"
+            style="margin:0">
+        <button type="submit" class="btn btn-danger btn-sm">영구 삭제</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 <!-- ── 새 도메인 추가 ── -->
 <div class="card" style="margin-bottom:14px">
   <div class="card-header"><span class="card-title">새 도메인 추가</span></div>
   <div class="card-body">
     <form method="post" action="/admin/domains/add">
-      <div class="form-field">
-        <label class="form-label">도메인 이름</label>
-        <input class="form-input" type="text" name="name" required placeholder="예: AI 논문 위키">
-        <div class="form-hint">
-          입력한 이름에 따라 <code style="font-family:var(--font-mono); font-size:11.5px">{{ workspace_root }}</code> 하위에 서브 폴더가 자동 생성됩니다.
+      <div class="form-row" style="margin-bottom:14px">
+        <div class="form-field" style="margin:0">
+          <label class="form-label">도메인 이름</label>
+          <input class="form-input" type="text" name="name" required placeholder="예: AI 논문 위키">
+          <div class="form-hint">
+            입력한 이름에 따라 <code style="font-family:var(--font-mono); font-size:11.5px">{{ workspace_root }}</code> 하위에 서브 폴더가 자동 생성됩니다.
+          </div>
+        </div>
+        <div class="form-field" style="margin:0">
+          <label class="form-label">연구 도메인 / 주제</label>
+          <input class="form-input" type="text" name="domain_topic" required placeholder="예: 의료 OSCE 평가, 딥러닝 연구">
+          <div class="form-hint">새 위키의 AGENTS.md에 들어갈 전문 분야 설명입니다.</div>
         </div>
       </div>
-      <button type="submit" class="btn btn-primary btn-sm">도메인 추가</button>
+      <button type="submit" class="btn btn-primary btn-sm">도메인 추가 및 초기화</button>
     </form>
   </div>
 </div>
@@ -237,7 +328,17 @@ document.addEventListener('DOMContentLoaded', function() {
     <form method="post" action="/admin/settings" style="display:flex; flex-direction:column; gap:14px">
 
       <div>
-        <div class="section-title" style="margin-bottom:10px">LLM 모델</div>
+        <div class="section-title" style="margin-bottom:10px">LLM 연결</div>
+        <div class="form-field">
+          <label class="form-label">Provider</label>
+          <select class="form-select" name="llm_provider" id="admin-llm-provider"
+                  onchange="updateAdminProviderFields()">
+            {% for value, label in llm_providers %}
+            <option value="{{ value }}" {% if cfg.llm_provider == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-hint">Ollama는 localhost와 연구소 내부 서버 URL을 모두 같은 연결로 사용합니다.</div>
+        </div>
         <div class="form-field">
           <label class="form-label">모델 선택</label>
           <select class="form-select" name="model" id="admin-model-select"
@@ -253,35 +354,53 @@ document.addEventListener('DOMContentLoaded', function() {
             <label class="form-label">커스텀 모델 ID</label>
             <input class="form-input" type="text" name="model_custom"
                    value="{{ cfg.model if is_custom else '' }}"
-                   placeholder="예: ollama/codellama, openai/gpt-4-turbo">
-            <div class="form-hint">litellm 형식: provider/model-name</div>
+                   placeholder="예: ollama/gemma4:31b, gemini/gemini-2.5-pro, openrouter/openai/gpt-4o">
+            <div class="form-hint">LiteLLM 형식. provider를 선택하면 Ollama/Google/OpenRouter의 짧은 모델명은 자동 보정됩니다.</div>
           </div>
         </div>
       </div>
 
       <div>
-        <div class="section-title" style="margin-bottom:10px">API 키</div>
-        <div class="form-row" style="margin-bottom:14px">
+        <div class="section-title" style="margin-bottom:10px">연결 정보</div>
+        <div class="form-field admin-provider-field" data-provider-field="ollama">
+          <label class="form-label">Ollama 서버 URL</label>
+          <input class="form-input" type="text" name="ollama_base_url" value="{{ cfg.ollama_base_url }}" placeholder="http://localhost:11434">
+          <div class="form-hint">예: http://localhost:11434 또는 http://llm-lab.local:11434</div>
+          <div class="form-hint">
+            {% if ollama_models %}
+            감지된 모델: <code style="font-family:var(--font-mono); font-size:11.5px">{{ ollama_models|join(', ') }}</code>
+            {% else %}
+            현재 URL에서 감지된 Ollama 모델이 없습니다.
+            {% endif %}
+          </div>
+        </div>
+        <div class="form-row admin-provider-field" data-provider-field="anthropic openrouter custom" style="margin-bottom:14px">
           <div class="form-field" style="margin:0">
             <label class="form-label">Anthropic API Key</label>
             <input class="form-input" type="password" name="anthropic_api_key" value="{{ cfg.anthropic_api_key }}" placeholder="sk-ant-...">
           </div>
           <div class="form-field" style="margin:0">
+            <label class="form-label">OpenRouter API Key</label>
+            <input class="form-input" type="password" name="openrouter_api_key" value="{{ cfg.openrouter_api_key }}" placeholder="sk-or-...">
+          </div>
+        </div>
+        <div class="form-row admin-provider-field" data-provider-field="openai google openrouter custom" style="margin-bottom:14px">
+          <div class="form-field" style="margin:0">
             <label class="form-label">OpenAI API Key</label>
             <input class="form-input" type="password" name="openai_api_key" value="{{ cfg.openai_api_key }}" placeholder="sk-...">
           </div>
-        </div>
-        <div class="form-field">
-          <label class="form-label">Ollama 서버 URL</label>
-          <input class="form-input" type="text" name="ollama_base_url" value="{{ cfg.ollama_base_url }}" placeholder="http://localhost:11434">
-          <div class="form-hint">로컬 Ollama 서버 주소 (LM Studio 등도 동일 형식)</div>
+          <div class="form-field" style="margin:0">
+            <label class="form-label">Google API Key</label>
+            <input class="form-input" type="password" name="google_api_key" value="{{ cfg.google_api_key }}" placeholder="AIza...">
+          </div>
         </div>
         <div style="display:flex; align-items:center; gap:12px">
           <button type="button" class="btn btn-ghost btn-sm"
-                  hx-get="/settings/test-model"
+                  hx-post="/settings/test-model"
+                  hx-include="closest form"
                   hx-target="#model-test-result"
                   hx-swap="innerHTML">
-            연결 테스트
+            현재 입력값으로 연결 테스트
           </button>
           <span id="model-test-result" style="font-size:13px"></span>
         </div>
@@ -320,6 +439,10 @@ document.addEventListener('DOMContentLoaded', function() {
       <tr>
         <td style="color:var(--text-muted); padding:6px 16px 6px 0">등록 도메인</td>
         <td>{{ domains|length }}개</td>
+      </tr>
+      <tr>
+        <td style="color:var(--text-muted); padding:6px 16px 6px 0">아카이브</td>
+        <td>{{ archived_domains|length }}개</td>
       </tr>
     </table>
   </div>

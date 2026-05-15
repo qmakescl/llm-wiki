@@ -59,13 +59,20 @@ def cli(ctx: click.Context) -> None:
 @click.argument("path", type=click.Path(exists=True))
 @click.option("--model", "-m", default=None, help="LLM model override (e.g. gpt-4o)")
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
-def ingest(path: str, model: str | None, yes: bool) -> None:
+@click.option(
+    "--metrics-output",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write ingest timing/call metrics to a JSON file",
+)
+def ingest(path: str, model: str | None, yes: bool, metrics_output: Path | None) -> None:
     """Add a source document to the wiki.
 
     PATH is the file to ingest (PDF, markdown, or text).
     The file should live inside the raw/ directory.
     """
     from wiki_cli.ops.ingest import run_ingest
+    from wiki_cli.metrics import Metrics
 
     wiki_root = find_wiki_root()
     source = Path(path).resolve()
@@ -75,7 +82,14 @@ def ingest(path: str, model: str | None, yes: bool) -> None:
         console.print(f"[bold]Source:   [/bold] {source}")
         click.confirm("Proceed with ingest?", abort=True)
 
-    run_ingest(wiki_root=wiki_root, source=source, model=model)
+    metrics = Metrics() if metrics_output else None
+    if metrics:
+        with metrics.timer("ingest.total"):
+            run_ingest(wiki_root=wiki_root, source=source, model=model, metrics=metrics)
+        metrics.write_json(metrics_output)
+        console.print(f"[dim]Metrics written: {metrics_output}[/dim]")
+    else:
+        run_ingest(wiki_root=wiki_root, source=source, model=model)
 
 
 @cli.command()
@@ -111,6 +125,51 @@ def lint(model: str | None, fix: bool) -> None:
 
     wiki_root = find_wiki_root()
     run_lint(wiki_root=wiki_root, model=model, auto_fix=fix)
+
+
+@cli.group()
+def vector() -> None:
+    """Manage the local chunk vector index."""
+
+
+@vector.command("rebuild")
+def vector_rebuild() -> None:
+    """Rebuild vector chunks for all wiki pages."""
+    from wiki_cli import vector_index
+
+    wiki_root = find_wiki_root()
+    stats = vector_index.refresh_all(wiki_root)
+    console.print(
+        f"[green]✓[/green] Vector index rebuilt: "
+        f"{stats.pages_indexed} pages, {stats.chunks_indexed} chunks"
+    )
+    if stats.errors:
+        console.print(f"[yellow]Warnings:[/yellow] {stats.errors} page(s) failed or skipped")
+
+
+@vector.command("stats")
+def vector_stats() -> None:
+    """Show vector index stats."""
+    from wiki_cli import vector_index
+
+    wiki_root = find_wiki_root()
+    info = vector_index.stats(wiki_root)
+    console.print(f"[bold]Vector DB:[/bold] {info['path']}")
+    console.print(f"Pages : {info['pages']}")
+    console.print(f"Chunks: {info['chunks']}")
+
+
+@vector.command("clear")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+def vector_clear(yes: bool) -> None:
+    """Delete the local vector index database."""
+    from wiki_cli import vector_index
+
+    wiki_root = find_wiki_root()
+    if not yes:
+        click.confirm(f"Delete vector index under {wiki_root / '.vectors'}?", abort=True)
+    vector_index.clear(wiki_root)
+    console.print("[green]✓[/green] Vector index cleared")
 
 
 @cli.command()

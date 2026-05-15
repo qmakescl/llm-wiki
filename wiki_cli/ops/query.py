@@ -11,7 +11,8 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from wiki_cli import llm, fs, search
+from wiki_cli import llm, fs, search, search_index
+from wiki_cli.metrics import Metrics
 
 console = Console()
 
@@ -27,6 +28,7 @@ def run_query(
     model: str | None,
     save: bool,
     progress_callback: Callable[[str], None] | None = None,
+    metrics: Metrics | None = None,
 ) -> str:
     """위키에서 질문에 답변합니다. 답변 문자열을 반환합니다."""
     schema = _load_schema(wiki_root)
@@ -47,8 +49,10 @@ def run_query(
         # ── Step 2: Find relevant pages ───────────────────────────────────
         _emit("관련 페이지 검색 중...")
         p.update(task, description="관련 페이지 검색 중...")
-        results = search.search(question, fs.wiki_dir(wiki_root), top_k=6)
+        results = search.search(question, fs.wiki_dir(wiki_root), top_k=6, metrics=metrics)
         context_pages = _build_context(results)
+        if metrics:
+            metrics.record("query.context_chars", len(context_pages))
         _emit(f"관련 페이지 {len(results)}개 발견")
         p.update(task, description=f"관련 페이지 {len(results)}개 읽는 중...")
 
@@ -69,7 +73,12 @@ Question: {question}
 Provide a comprehensive answer with citations to wiki pages using [[PageName]] syntax.
 If multiple pages contradict each other, note the contradiction.
 """
-        answer = llm.call(prompt, system=_SYSTEM, model=model, max_tokens=2048)
+        if metrics:
+            with metrics.timer("query.llm_generation"):
+                answer = llm.call(prompt, system=_SYSTEM, model=model, max_tokens=2048)
+            metrics.count("query.llm_calls")
+        else:
+            answer = llm.call(prompt, system=_SYSTEM, model=model, max_tokens=2048)
         p.update(task, description="완료.", completed=True)
         _emit("답변 생성 완료")
 
@@ -121,11 +130,42 @@ def _build_context(results: list[search.SearchResult]) -> str:
     parts = []
     for r in results:
         try:
-            body = r.path.read_text(encoding="utf-8")[:3000]
+            if r.metadata and r.metadata.get("kind") == "vector_chunk":
+                heading = str(r.metadata.get("heading") or "").strip()
+                chunk_text = str(r.metadata.get("chunk_text") or r.snippet)
+                heading_prefix = f"## {heading}\n" if heading else ""
+                parts.append(
+                    f"=== {r.path.name} (score: {r.score:.2f}) ===\n"
+                    f"{heading_prefix}{chunk_text[:3000]}"
+                )
+                continue
+            wiki_dir = r.path.parent.parent if r.path.parent.name in {"sources", "entities", "concepts", "synthesis"} else r.path.parent
+            payload, _ = search_index.refresh_index(wiki_dir)
+            entry = None
+            for candidate in payload.get("entries", {}).values():
+                if candidate.get("path", "").endswith(r.path.name):
+                    entry = candidate
+                    break
+            if entry:
+                body = _best_chunk_text(entry, r.snippet)
+            else:
+                body = r.path.read_text(encoding="utf-8")[:3000]
             parts.append(f"=== {r.path.name} (score: {r.score:.2f}) ===\n{body}")
         except OSError:
             pass
     return "\n\n".join(parts)
+
+
+def _best_chunk_text(entry: dict, snippet: str) -> str:
+    chunks = entry.get("chunks", [])
+    if not chunks:
+        return entry.get("plain_text_preview", "")
+    if snippet:
+        for chunk in chunks:
+            if snippet[:40].lower() in chunk.get("text", "").lower():
+                return f"## {chunk.get('heading', '')}\n{chunk.get('text', '')}"[:3000]
+    chunk = max(chunks, key=lambda c: len(c.get("text", "")))
+    return f"## {chunk.get('heading', '')}\n{chunk.get('text', '')}"[:3000]
 
 
 def _is_notable(answer: str) -> bool:

@@ -1,44 +1,34 @@
-# 가상환경
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
 .venv/
 venv/
 env/
 
-# Python 캐시
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.pyw
-*.egg-info/
-dist/
+# Packaging/build outputs
 build/
-*.egg
+dist/
+*.egg-info/
 
-# 테스트 캐시
-.pytest_cache/
-.coverage
-htmlcov/
+# Local app/runtime data
+.llm_wiki_cache/
+.vectors/
+data/
+wiki/
 
-# macOS
-.DS_Store
+# Local tool state
+.claude/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# 사용자 설정 (로컬 머신에만 존재)
-~/.config/llm-wiki/
-
-# 위키 데이터 (소스 파일 및 생성 콘텐츠)
-workspace/
-*.pdf
-*.pkl
-
-# 환경 변수 파일
-.env
-.env.local
-
-# 의존성 잠금 (선택적 추적)
-# uv.lock  ← 재현성을 위해 추적 권장
+# Release/export artifacts generated outside source
+release/

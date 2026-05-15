@@ -116,6 +116,13 @@ def list_running_jobs() -> list[IngestJob]:
     return [j for j in _store.values() if j.status == "running"]
 
 
+def clear_jobs_for_domain(domain_name: str) -> None:
+    """Remove buffered ingest jobs for a domain after delete/re-init."""
+    for job_id, job in list(_store.items()):
+        if job.domain_name == domain_name:
+            del _store[job_id]
+
+
 def cleanup_old_jobs(max_done: int = 30) -> None:
     """완료/실패 작업 중 오래된 것을 최대 max_done개로 제한."""
     finished = [j for j in _store.values() if j.status in ("done", "failed")]

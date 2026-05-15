@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
@@ -10,7 +12,8 @@ from pathlib import Path
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from wiki_cli import llm, fs
+from wiki_cli import llm, fs, source_registry, structured_ingest
+from wiki_cli.metrics import Metrics
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -32,6 +35,8 @@ def run_ingest(
     source: Path,
     model: str | None,
     progress_callback: Callable[[str], None] | None = None,
+    data_root: Path | None = None,
+    metrics: Metrics | None = None,
 ) -> None:
     slug = fs.file_slug(source.stem)
 
@@ -42,6 +47,14 @@ def run_ingest(
             f"'{slug}'은(는) 이미 ingest되었습니다 ({existing_page}). "
             "다시 처리하려면 해당 파일을 삭제 후 재시도하세요."
         )
+
+    if data_root is not None:
+        duplicate = source_registry.find_ingested_duplicate(data_root, source)
+        if duplicate is not None:
+            raise DuplicateSourceError(
+                f"동일한 내용의 소스가 이미 ingest되었습니다: "
+                f"{duplicate.get('relative_path')} → {duplicate.get('summary_page')}"
+            )
 
     schema = _load_schema(wiki_root)
 
@@ -56,7 +69,35 @@ def run_ingest(
         # ── Step 1: Read & discuss ────────────────────────────────────────
         _emit("소스 파일 읽는 중...")
         p.update(task, description="소스 파일 읽는 중...")
-        summary_prompt = f"""
+        if metrics:
+            with metrics.timer("ingest.structured_extract"):
+                structured_result, raw_overview = structured_ingest.extract_from_file(
+                    schema=schema,
+                    source=source,
+                    system=_SYSTEM,
+                    model=model,
+                    metrics=metrics,
+                )
+            metrics.count("ingest.llm_file_calls")
+        else:
+            structured_result, raw_overview = structured_ingest.extract_from_file(
+                schema=schema,
+                source=source,
+                system=_SYSTEM,
+                model=model,
+            )
+
+        if structured_result is not None:
+            overview = structured_ingest.to_overview(structured_result)
+            _emit("구조화 추출 완료 — 관련 페이지 계획 재사용")
+            logger.info("structured ingest extraction succeeded: %s", source.name)
+        else:
+            _emit("구조화 추출 파싱 실패 — 기존 overview 흐름으로 대체")
+            logger.warning("structured ingest extraction failed; using legacy overview flow: %s", source.name)
+            overview = raw_overview
+
+        if not overview.strip():
+            summary_prompt = f"""
 {schema}
 
 Read the following source document and extract:
@@ -69,16 +110,19 @@ Read the following source document and extract:
 
 Source: {source.name}
 ---
-"""
-        overview = llm.call_with_file(summary_prompt, source, system=_SYSTEM, model=model)
+            """
+            overview = llm.call_with_file(summary_prompt, source, system=_SYSTEM, model=model, metrics=metrics)
 
         # ── Step 2: Plan entity/concept pages (source 페이지 작성 전에 먼저) ──
         # display_name을 source 페이지에 그대로 사용해 링크 이름이 일치하도록 함
         _emit("관련 엔티티/개념 계획 수립 중...")
         p.update(task, description="관련 엔티티/개념 계획 수립 중...")
-        entity_entries, concept_entries = _plan_related_pages(
-            wiki_root, overview, model, schema
-        )
+        if structured_result is not None:
+            entity_entries, concept_entries = structured_ingest.entries_from_result(structured_result)
+        else:
+            entity_entries, concept_entries = _plan_related_pages(
+                wiki_root, overview, model, schema, metrics=metrics
+            )
         entity_names = [_page_display_name(s) for _, s in entity_entries]
         concept_names = [_page_display_name(s) for _, s in concept_entries]
 
@@ -91,7 +135,14 @@ Source: {source.name}
         planned_entities_str = "\n".join(f"- [[{n}]]" for n in entity_names) or "  (없음)"
         planned_concepts_str = "\n".join(f"- [[{n}]]" for n in concept_names) or "  (없음)"
 
-        source_page_prompt = f"""
+        if structured_result is not None:
+            _meta, _body = structured_ingest.render_source_page(
+                structured_result,
+                source_name=source.name,
+                fallback_title=source.stem,
+            )
+        else:
+            source_page_prompt = f"""
 {schema}
 
 Write a wiki page summarising this source document.
@@ -135,12 +186,18 @@ sources: ["{source.name}"]
 
 Source filename: {source.name}
 """
-        source_page = llm.call(source_page_prompt, system=_SYSTEM, model=model)
-        _meta, _body = _parse_llm_page(source_page)
+            if metrics:
+                with metrics.timer("ingest.source_page_llm"):
+                    source_page = llm.call(source_page_prompt, system=_SYSTEM, model=model, metrics=metrics)
+                metrics.count("ingest.llm_calls")
+            else:
+                source_page = llm.call(source_page_prompt, system=_SYSTEM, model=model)
+            _meta, _body = _parse_llm_page(source_page)
         # title이 없거나 파싱 실패 시에도 반드시 설정
         if not _meta.get("title"):
             _meta["title"] = _extract_title(source_page) or source.stem
         fs.write_page(page_path, _meta, _body)
+        _refresh_vector_index(wiki_root, page_path, metrics=metrics)
 
         # ── Step 4: Update index ──────────────────────────────────────────
         _emit("인덱스 업데이트 중...")
@@ -152,13 +209,32 @@ Source filename: {source.name}
         # ── Step 5: Write entity & concept pages ─────────────────────────
         _emit("관련 엔티티/개념 페이지 작성 중...")
         p.update(task, description="관련 엔티티/개념 페이지 작성 중...")
-        for kind, entries in (("entities", entity_entries), ("concepts", concept_entries)):
-            for action, s in entries:
-                display = _page_display_name(s)
-                _emit(f"  {'생성' if action == 'create' else '업데이트'}: {kind}/{display}")
-                _write_or_update_page(
-                    wiki_root, kind, s, action, source.name, overview, model, schema
-                )
+        write_jobs = [(kind, action, s) for kind, entries in (("entities", entity_entries), ("concepts", concept_entries)) for action, s in entries]
+        if metrics:
+            metrics.record("ingest.related_page_count", len(write_jobs))
+
+        def _write_job(kind: str, action: str, s: str) -> None:
+            display = _page_display_name(s)
+            _emit(f"  {'생성' if action == 'create' else '업데이트'}: {kind}/{display}")
+            evidence_override = (
+                structured_ingest.evidence_text_for_slug(structured_result, kind, s)
+                if structured_result is not None else ""
+            )
+            _write_or_update_page(
+                wiki_root, kind, s, action, source.name, overview, model, schema,
+                evidence_override=evidence_override or None,
+                metrics=metrics,
+            )
+
+        workers = _get_ingest_workers()
+        if workers > 1 and len(write_jobs) > 1:
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = [executor.submit(_write_job, kind, action, s) for kind, action, s in write_jobs]
+                for future in as_completed(futures):
+                    future.result()
+        else:
+            for kind, action, s in write_jobs:
+                _write_job(kind, action, s)
 
         # ── Step 6: Log ───────────────────────────────────────────────────
         today = str(date.today())
@@ -168,6 +244,13 @@ Source filename: {source.name}
 - Overview: {_extract_first_sentence(overview)}
 """
         fs.append_log(wiki_root, log_entry)
+        if data_root is not None:
+            source_registry.mark_ingested(
+                data_root,
+                source,
+                summary_page=f"sources/{slug}.md",
+                model=model,
+            )
         _emit(f"완료: {title}")
         p.update(task, description="완료.", completed=True)
 
@@ -181,11 +264,20 @@ def _page_display_name(slug: str) -> str:
     return slug.replace("-", " ").replace("_", " ").title()
 
 
+def _get_ingest_workers() -> int:
+    try:
+        workers = int(os.environ.get("WIKI_INGEST_WORKERS", "1"))
+    except ValueError:
+        return 1
+    return max(1, min(workers, 4))
+
+
 def _plan_related_pages(
     wiki_root: Path,
     overview: str,
     model: str | None,
     schema: str,
+    metrics: Metrics | None = None,
 ) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
     """overview에서 entity/concept 페이지 계획을 추출한다.
 
@@ -218,7 +310,7 @@ CONCEPTS:
 - create: self-attention
 - update: language-modeling
 """
-    page_plan = llm.call(prompt, system=_SYSTEM, model=model)
+    page_plan = llm.call(prompt, system=_SYSTEM, model=model, metrics=metrics)
 
     entity_entries = _extract_section(page_plan, "ENTITIES")
     concept_entries = _extract_section(page_plan, "CONCEPTS")
@@ -231,7 +323,9 @@ CONCEPTS:
 
 def _write_or_update_page(
     wiki_root: Path, kind: str, slug: str, action: str,
-    source_name: str, overview: str, model: str | None, schema: str
+    source_name: str, overview: str, model: str | None, schema: str,
+    evidence_override: str | None = None,
+    metrics: Metrics | None = None,
 ) -> None:
     display_name = _page_display_name(slug)
     page_path = fs.wiki_dir(wiki_root) / kind / f"{display_name}.md"
@@ -249,7 +343,7 @@ def _write_or_update_page(
         existing_meta, existing_body = fs.read_page(legacy_path)
         action = "update"
 
-    evidence = _extract_relevant_evidence(overview, display_name)
+    evidence = evidence_override or _extract_relevant_evidence(overview, display_name)
 
     if action == "create":
         prompt = f"""
@@ -274,7 +368,12 @@ sources: ["{source_name}"]
 
 <content using [[Exact Page Title]] wikilinks, ⚠️ for uncertainties>
 """
-        page_content = llm.call(prompt, system=_SYSTEM, model=model)
+        if metrics:
+            with metrics.timer("ingest.related_page_llm"):
+                page_content = llm.call(prompt, system=_SYSTEM, model=model, metrics=metrics)
+            metrics.count("ingest.llm_calls")
+        else:
+            page_content = llm.call(prompt, system=_SYSTEM, model=model)
         _meta, _body = _parse_llm_page(page_content)
         _meta["title"] = display_name
         fs.write_page(page_path, _meta, _body)
@@ -300,7 +399,12 @@ NEW_SECTION: <New Section Title>
 Use [[Exact Page Title]] wikilinks, ⚠️ for uncertainties.
 If there is nothing new to add, output exactly: NO_UPDATE
 """
-        delta = llm.call(delta_prompt, system=_SYSTEM, model=model)
+        if metrics:
+            with metrics.timer("ingest.related_page_llm"):
+                delta = llm.call(delta_prompt, system=_SYSTEM, model=model, metrics=metrics)
+            metrics.count("ingest.llm_calls")
+        else:
+            delta = llm.call(delta_prompt, system=_SYSTEM, model=model)
 
         if delta.strip() == "NO_UPDATE":
             return
@@ -314,9 +418,27 @@ If there is nothing new to add, output exactly: NO_UPDATE
         fs.write_page(page_path, existing_meta, new_body)
 
     fs.update_index_entry(wiki_root, page_path, display_name, f"Updated from {source_name}")
+    _refresh_vector_index(wiki_root, page_path, metrics=metrics)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _refresh_vector_index(wiki_root: Path, page_path: Path, metrics: Metrics | None = None) -> None:
+    """Best-effort vector upsert; ingest must remain usable without embeddings."""
+    try:
+        from wiki_cli import vector_index
+
+        if metrics:
+            with metrics.timer("ingest.vector_refresh"):
+                stats = vector_index.refresh_page(fs.wiki_dir(wiki_root), page_path)
+            metrics.record("ingest.vector_chunks", stats.chunks_indexed)
+        else:
+            stats = vector_index.refresh_page(fs.wiki_dir(wiki_root), page_path)
+        if stats.errors:
+            logger.warning("vector index update skipped or failed: %s", page_path)
+    except Exception as exc:
+        logger.warning("vector index update failed for %s: %s", page_path, exc)
+
 
 def _load_schema(root: Path) -> str:
     agents = root / "AGENTS.md"

@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from wiki_web.app import templates
 from wiki_web import config as cfg
 from wiki_web import progress as jobs
-from wiki_cli import fs
+from wiki_cli import fs, source_registry
 from wiki_cli.ops.ingest import run_ingest, DuplicateSourceError
 
 router = APIRouter(prefix="/documents")
@@ -92,6 +92,7 @@ async def upload_file(files: list[UploadFile] = File(...)):
 
         content = await file.read()
         dest.write_bytes(content)
+        source_registry.register_uploaded_source(data_root, dest)
 
         slug = fs.file_slug(dest.stem)
         ingested = (wiki_root / "sources" / f"{slug}.md").exists()
@@ -133,7 +134,7 @@ async def start_ingest(request: Request, slug: str):
 
     async def _run() -> None:
         try:
-            await asyncio.to_thread(run_ingest, wiki_root, source, model, job.emit)
+            await asyncio.to_thread(run_ingest, wiki_root, source, model, job.emit, data_root)
             job.emit(f"✓ Ingest 완료: {source.name}")
         except DuplicateSourceError as e:
             job.emit_error(str(e))

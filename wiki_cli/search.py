@@ -3,6 +3,7 @@
 Tier 1 (default): grep / ripgrep — zero deps, works instantly.
 Tier 2 (opt-in):  BM25 via rank_bm25 — set WIKI_SEARCH=bm25.
 Tier 3 (opt-in):  Embedding similarity — set WIKI_SEARCH=embedding.
+Tier 4 (opt-in):  Chunk vector index — set WIKI_SEARCH=vector.
 
 Switching tiers never changes the call sites — same interface throughout.
 """
@@ -10,11 +11,17 @@ Switching tiers never changes the call sites — same interface throughout.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import pickle
 from dataclasses import dataclass
+from typing import Any
 from pathlib import Path
+import shutil
+
+from wiki_cli import search_index
+from wiki_cli.metrics import Metrics
 
 logger = logging.getLogger(__name__)
 
@@ -28,18 +35,72 @@ class SearchResult:
     path: Path
     score: float          # higher = more relevant
     snippet: str          # short context around the match
+    metadata: dict[str, Any] | None = None
 
 
 # ── Public API ───────────────────────────────────────────────────────────────
 
-def search(query: str, wiki_dir: Path, top_k: int = 8) -> list[SearchResult]:
+def search(query: str, wiki_dir: Path, top_k: int = 8, metrics: Metrics | None = None) -> list[SearchResult]:
     """Return the top_k most relevant wiki pages for query."""
+    if metrics:
+        with metrics.timer("search.index_refresh"):
+            _payload, stats = search_index.refresh_index(wiki_dir)
+        metrics.record("search.index_updated_files", stats.updated_files)
+    else:
+        search_index.refresh_index(wiki_dir)
     tier = os.environ.get("WIKI_SEARCH", "grep").lower()
+    if metrics:
+        metrics.record("search.tier", tier)
+        with metrics.timer("search.total"):
+            results = _search_by_tier(query, wiki_dir, top_k, tier)
+        metrics.record("search.result_count", len(results))
+        return results
+    return _search_by_tier(query, wiki_dir, top_k, tier)
+
+
+def _search_by_tier(query: str, wiki_dir: Path, top_k: int, tier: str) -> list[SearchResult]:
+    if tier == "vector":
+        results = _vector_search(query, wiki_dir, top_k)
+        if results:
+            return results
+        logger.warning("vector 검색 결과 없음 또는 사용 불가 — grep으로 대체합니다.")
+        return _grep_search(query, wiki_dir, top_k)
     if tier == "bm25":
         return _bm25_search(query, wiki_dir, top_k)
     if tier == "embedding":
         return _embedding_search(query, wiki_dir, top_k)
     return _grep_search(query, wiki_dir, top_k)
+
+
+def _vector_search(query: str, wiki_dir: Path, top_k: int) -> list[SearchResult]:
+    try:
+        from wiki_cli import vector_index
+    except Exception as exc:
+        logger.warning("vector index 모듈 로드 실패 — grep으로 대체합니다: %s", exc)
+        return []
+
+    try:
+        chunks = vector_index.search_chunks(query, wiki_dir, top_k)
+    except Exception as exc:
+        logger.warning("vector 검색 실패 — grep으로 대체합니다: %s", exc)
+        return []
+
+    return [
+        SearchResult(
+            path=wiki_dir / result.wiki_path,
+            score=result.score,
+            snippet=result.chunk_text[:240],
+            metadata={
+                "kind": "vector_chunk",
+                "heading": result.heading,
+                "chunk_text": result.chunk_text,
+                "chunk_id": result.chunk_id,
+                "page_title": result.page_title,
+                "chunk_index": result.chunk_index,
+            },
+        )
+        for result in chunks
+    ]
 
 
 def read_index(wiki_dir: Path) -> str:
@@ -56,26 +117,57 @@ def _grep_search(query: str, wiki_dir: Path, top_k: int) -> list[SearchResult]:
     if not words:
         return []
 
-    md_files = list(wiki_dir.rglob("*.md"))
+    if shutil.which("rg"):
+        results = _ripgrep_search(words, wiki_dir, top_k)
+        if results:
+            return results
+
+    payload, _ = search_index.refresh_index(wiki_dir)
     scored: list[tuple[float, Path, str]] = []
 
-    for md in md_files:
-        try:
-            text = md.read_text(encoding="utf-8", errors="replace").lower()
-        except OSError:
-            continue
+    for entry in search_index.candidate_entries(payload):
+        text = " ".join([entry.get("plain_text_preview", ""), *(c.get("text", "") for c in entry.get("chunks", []))]).lower()
         score = sum(text.count(w) for w in words)
         if score == 0:
             continue
-        # snippet: first line that contains a query word
-        snippet = _first_matching_line(md, words)
-        scored.append((score, md, snippet))
+        snippet = _first_matching_chunk(entry, words)
+        scored.append((score, wiki_dir / entry["path"], snippet))
 
     scored.sort(key=lambda x: x[0], reverse=True)
     return [
         SearchResult(path=p, score=s, snippet=snip)
         for s, p, snip in scored[:top_k]
     ]
+
+
+def _ripgrep_search(words: list[str], wiki_dir: Path, top_k: int) -> list[SearchResult]:
+    import subprocess
+
+    query = "|".join(words)
+    try:
+        proc = subprocess.run(
+            ["rg", "--json", "-i", "--glob", "*.md", "--glob", "!.search/**", query, str(wiki_dir)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        return []
+    scores: dict[Path, tuple[int, str]] = {}
+    for line in proc.stdout.splitlines():
+        try:
+            item = json.loads(line)
+        except Exception:
+            continue
+        if item.get("type") != "match":
+            continue
+        path = Path(item["data"]["path"]["text"])
+        snippet = item["data"]["lines"]["text"].strip()[:120]
+        count, first = scores.get(path, (0, snippet))
+        scores[path] = (count + 1, first)
+    ranked = sorted(scores.items(), key=lambda item: item[1][0], reverse=True)
+    return [SearchResult(path=p, score=float(score), snippet=snippet) for p, (score, snippet) in ranked[:top_k]]
 
 
 def _first_matching_line(path: Path, words: list[str]) -> str:
@@ -86,6 +178,15 @@ def _first_matching_line(path: Path, words: list[str]) -> str:
     except OSError:
         pass
     return ""
+
+
+def _first_matching_chunk(entry: dict, words: list[str]) -> str:
+    for chunk in entry.get("chunks", []):
+        text = chunk.get("text", "")
+        if any(w in text.lower() for w in words):
+            return text.strip().splitlines()[0][:120] if text.strip() else ""
+    preview = entry.get("plain_text_preview", "")
+    return preview[:120]
 
 
 # ── Tier 2: BM25 (rank_bm25) ─────────────────────────────────────────────────
@@ -100,13 +201,12 @@ def _bm25_search(query: str, wiki_dir: Path, top_k: int) -> list[SearchResult]:
         )
         return _grep_search(query, wiki_dir, top_k)
 
-    md_files = list(wiki_dir.rglob("*.md"))
-    corpus = []
-    for md in md_files:
-        try:
-            corpus.append(md.read_text(encoding="utf-8", errors="replace").lower().split())
-        except OSError:
-            corpus.append([])
+    payload, _ = search_index.refresh_index(wiki_dir)
+    entries = search_index.candidate_entries(payload)
+    corpus = [
+        " ".join([e.get("plain_text_preview", ""), *(c.get("text", "") for c in e.get("chunks", []))]).lower().split()
+        for e in entries
+    ]
 
     bm25 = BM25Okapi(corpus)
     scores = bm25.get_scores(query.lower().split())
@@ -114,10 +214,10 @@ def _bm25_search(query: str, wiki_dir: Path, top_k: int) -> list[SearchResult]:
     indexed = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
     words = [w for w in query.lower().split() if len(w) > 2]
     return [
-        SearchResult(
-            path=md_files[i],
+            SearchResult(
+            path=wiki_dir / entries[i]["path"],
             score=float(s),
-            snippet=_first_matching_line(md_files[i], words),
+            snippet=_first_matching_chunk(entries[i], words),
         )
         for i, s in indexed[:top_k]
         if s > 0
@@ -174,14 +274,18 @@ def _get_embedding_model():
         return _EMBEDDING_MODEL
     try:
         from sentence_transformers import SentenceTransformer
-    except ImportError:
+    except Exception as exc:
         logger.warning(
-            "sentence-transformers 미설치 — grep으로 대체합니다. "
-            "임베딩 검색을 사용하려면: pip install sentence-transformers"
+            "sentence-transformers 로드 실패 — grep으로 대체합니다: %s",
+            exc,
         )
         return None
-    logger.info("SentenceTransformer 모델 로드: %s", _EMBEDDING_MODEL_NAME)
-    _EMBEDDING_MODEL = SentenceTransformer(_EMBEDDING_MODEL_NAME)
+    try:
+        logger.info("SentenceTransformer 모델 로드: %s", _EMBEDDING_MODEL_NAME)
+        _EMBEDDING_MODEL = SentenceTransformer(_EMBEDDING_MODEL_NAME)
+    except Exception as exc:
+        logger.warning("SentenceTransformer 모델 로드 실패 — grep으로 대체합니다: %s", exc)
+        return None
     return _EMBEDDING_MODEL
 
 

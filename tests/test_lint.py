@@ -47,3 +47,33 @@ def test_orphan_skips_synthesis_pages(wiki_root):
     orphans = {i["page"] for i in issues}
     # synthesis는 orphan 체크에서 제외된다
     assert all("synthesis" not in p for p in orphans)
+
+
+def test_broken_wikilink_detected(wiki_root):
+    page = wiki_root / "concepts" / "Transformer.md"
+    fs.write_page(page, {"title": "Transformer", "type": "concept"}, "# Transformer\n\nSee [[Missing Page]].")
+    payload, _ = lint.search_index.refresh_index(wiki_root)
+
+    issues = lint._check_broken_wikilinks(payload)
+
+    assert issues
+    assert issues[0]["type"] == "broken wikilink"
+
+
+def test_duplicate_title_detected(wiki_root):
+    fs.write_page(wiki_root / "concepts" / "A.md", {"title": "Same", "type": "concept"}, "# Same")
+    fs.write_page(wiki_root / "entities" / "B.md", {"title": "Other", "aliases": ["Same"], "type": "entity"}, "# Other")
+    payload, _ = lint.search_index.refresh_index(wiki_root)
+
+    issues = lint._check_duplicate_titles(payload)
+
+    assert any(i["type"] == "duplicate title/alias" for i in issues)
+
+
+def test_missing_frontmatter_detected(wiki_root):
+    _write(wiki_root / "concepts" / "Plain.md", "# Plain\n\nNo frontmatter.")
+    payload, _ = lint.search_index.refresh_index(wiki_root)
+
+    issues = lint._check_missing_frontmatter(payload)
+
+    assert any(i["page"] == "concepts/Plain.md" for i in issues)

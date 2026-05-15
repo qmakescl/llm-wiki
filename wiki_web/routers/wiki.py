@@ -52,6 +52,8 @@ def _wiki_domain(root: Path) -> str:
 async def dashboard(request: Request):
     c = cfg.load()
     domains = cfg.get_all_domains(c)
+    if not domains:
+        return RedirectResponse("/admin", status_code=303)
     active_domain = cfg.get_active_domain(c)
     root = cfg.get_wiki_root(c) if active_domain else None
     initialized = cfg.wiki_is_initialized(root) if root else False
@@ -78,7 +80,8 @@ async def init_wiki(
     domain: str = Form(...),
     domain_name: str = Form("새 위키"),
 ):
-    """최초 위키 생성 — 도메인 추가 + wiki init."""
+    """Legacy first-run endpoint; first wiki setup now lives in /admin."""
+    return RedirectResponse("/admin", status_code=303)
     import re
     ws_root = Path(directory).expanduser().resolve()
     slug = re.sub(r'[^a-zA-Z0-9가-힣]+', '_', domain_name).strip('_').lower() or "my_wiki"

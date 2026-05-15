@@ -9,7 +9,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
-from wiki_cli import llm, fs
+from wiki_cli import llm, fs, search_index
 
 console = Console()
 
@@ -26,6 +26,12 @@ def run_lint(wiki_root: Path, model: str | None, auto_fix: bool) -> None:
 
     # ── Check 1: Orphan pages (no inbound wikilinks) ──────────────────────
     issues += _check_orphans(pages, wiki_root)
+
+    index_payload, _stats = search_index.refresh_index(fs.wiki_dir(wiki_root))
+    issues += _check_broken_wikilinks(index_payload)
+    issues += _check_duplicate_titles(index_payload)
+    issues += _check_missing_frontmatter(index_payload)
+    issues += _check_invalid_source_refs(index_payload, wiki_root)
 
     # ── Check 2: TODO markers ─────────────────────────────────────────────
     issues += _check_todos(pages, wiki_root)
@@ -85,6 +91,73 @@ def _check_orphans(pages: list[Path], root: Path) -> list[dict]:
                     "type": "orphan page",
                     "page": str(rel),
                     "detail": "No other page links here",
+                })
+    return issues
+
+
+def _check_broken_wikilinks(index_payload: dict) -> list[dict]:
+    issues = []
+    for entry in index_payload.get("entries", {}).values():
+        for link in entry.get("outgoing_links", []):
+            if search_index.resolve_wikilink(link, index_payload) is None:
+                issues.append({
+                    "severity": "high",
+                    "type": "broken wikilink",
+                    "page": entry.get("path", ""),
+                    "detail": f"Cannot resolve [[{link}]]",
+                })
+    return issues
+
+
+def _check_duplicate_titles(index_payload: dict) -> list[dict]:
+    seen: dict[str, list[str]] = {}
+    for entry in index_payload.get("entries", {}).values():
+        candidates = [entry.get("title", ""), *entry.get("aliases", [])]
+        for candidate in candidates:
+            key = candidate.strip().lower()
+            if key:
+                seen.setdefault(key, []).append(entry.get("path", ""))
+    issues = []
+    for title, paths in seen.items():
+        unique = sorted(set(paths))
+        if len(unique) > 1:
+            issues.append({
+                "severity": "medium",
+                "type": "duplicate title/alias",
+                "page": ", ".join(unique[:3]),
+                "detail": f"Duplicate title or alias: {title}",
+            })
+    return issues
+
+
+def _check_missing_frontmatter(index_payload: dict) -> list[dict]:
+    return [
+        {
+            "severity": "medium",
+            "type": "missing frontmatter",
+            "page": entry.get("path", ""),
+            "detail": "Page does not start with YAML frontmatter",
+        }
+        for entry in index_payload.get("entries", {}).values()
+        if not entry.get("has_frontmatter")
+    ]
+
+
+def _check_invalid_source_refs(index_payload: dict, root: Path) -> list[dict]:
+    issues = []
+    for entry in index_payload.get("entries", {}).values():
+        for source in entry.get("sources", []):
+            # URLs and opaque source names are allowed; relative raw paths are checked.
+            if "://" in source or "/" not in source:
+                continue
+            candidate = root.parent / "data" / source
+            raw_candidate = root.parent / "data" / "raw" / source.removeprefix("raw/")
+            if not candidate.exists() and not raw_candidate.exists():
+                issues.append({
+                    "severity": "low",
+                    "type": "invalid source reference",
+                    "page": entry.get("path", ""),
+                    "detail": f"Source reference does not exist: {source}",
                 })
     return issues
 

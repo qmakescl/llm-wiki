@@ -712,6 +712,15 @@ wheels = [
 ]
 
 [[package]]
+name = "iniconfig"
+version = "2.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/72/34/14ca021ce8e5dfedc35312d08ba8bf51fdd999c576889fc2c24cb97f4f10/iniconfig-2.3.0.tar.gz", hash = "sha256:c76315c77db068650d49c5b56314774a7804df16fee4402c1f19d6d15d8c4730", size = 20503, upload-time = "2025-10-18T21:55:43.219Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cb/b1/3846dd7f199d53cb17f49cba7e651e9ce294d8497c8c150530ed11865bb8/iniconfig-2.3.0-py3-none-any.whl", hash = "sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12", size = 7484, upload-time = "2025-10-18T21:55:41.639Z" },
+]
+
+[[package]]
 name = "jinja2"
 version = "3.1.6"
 source = { registry = "https://pypi.org/simple" }
@@ -874,51 +883,57 @@ wheels = [
 
 [[package]]
 name = "llm-wiki"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
+    { name = "aiofiles" },
     { name = "click" },
+    { name = "fastapi" },
+    { name = "jinja2" },
     { name = "litellm" },
+    { name = "markdown" },
     { name = "pypdf" },
     { name = "python-frontmatter" },
+    { name = "python-multipart" },
+    { name = "rank-bm25" },
     { name = "rich" },
-    { name = "uvicorn" },
+    { name = "sentence-transformers" },
+    { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.optional-dependencies]
 bm25 = [
     { name = "rank-bm25" },
 ]
+dev = [
+    { name = "httpx" },
+    { name = "pytest" },
+]
 embedding = [
     { name = "sentence-transformers" },
-]
-web = [
-    { name = "aiofiles" },
-    { name = "fastapi" },
-    { name = "jinja2" },
-    { name = "markdown" },
-    { name = "python-multipart" },
-    { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "aiofiles", marker = "extra == 'web'", specifier = ">=23.0" },
+    { name = "aiofiles", specifier = ">=23.0" },
     { name = "click", specifier = ">=8.1" },
-    { name = "fastapi", marker = "extra == 'web'", specifier = ">=0.110" },
-    { name = "jinja2", marker = "extra == 'web'", specifier = ">=3.1" },
+    { name = "fastapi", specifier = ">=0.110" },
+    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
+    { name = "jinja2", specifier = ">=3.1" },
     { name = "litellm", specifier = ">=1.40" },
-    { name = "markdown", marker = "extra == 'web'", specifier = ">=3.6" },
+    { name = "markdown", specifier = ">=3.6" },
     { name = "pypdf", specifier = ">=4.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4" },
     { name = "python-frontmatter", specifier = ">=1.1" },
-    { name = "python-multipart", marker = "extra == 'web'", specifier = ">=0.0.9" },
+    { name = "python-multipart", specifier = ">=0.0.9" },
+    { name = "rank-bm25", specifier = ">=0.2.2" },
     { name = "rank-bm25", marker = "extra == 'bm25'", specifier = ">=0.2" },
     { name = "rich", specifier = ">=13.0" },
+    { name = "sentence-transformers", specifier = ">=2.7" },
     { name = "sentence-transformers", marker = "extra == 'embedding'", specifier = ">=2.7" },
-    { name = "uvicorn", specifier = ">=0.44.0" },
-    { name = "uvicorn", extras = ["standard"], marker = "extra == 'web'", specifier = ">=0.29" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.29" },
 ]
-provides-extras = ["web", "bm25", "embedding"]
+provides-extras = ["bm25", "embedding", "dev"]
 
 [[package]]
 name = "markdown"
@@ -1416,6 +1431,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pluggy"
+version = "1.6.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
+]
+
+[[package]]
 name = "propcache"
 version = "0.4.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1642,6 +1666,22 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7b/3f/9f2167401c2e94833ca3b69535bad89e533b5de75fefe4197a2c224baec2/pypdf-6.10.2.tar.gz", hash = "sha256:7d09ce108eff6bf67465d461b6ef352dcb8d84f7a91befc02f904455c6eea11d", size = 5315679, upload-time = "2026-04-15T16:37:36.978Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0c/d6/1d5c60cc17bbdf37c1552d9c03862fc6d32c5836732a0415b2d637edc2d0/pypdf-6.10.2-py3-none-any.whl", hash = "sha256:aa53be9826655b51c96741e5d7983ca224d898ac0a77896e64636810517624aa", size = 336308, upload-time = "2026-04-15T16:37:34.851Z" },
+]
+
+[[package]]
+name = "pytest"
+version = "9.0.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "iniconfig" },
+    { name = "packaging" },
+    { name = "pluggy" },
+    { name = "pygments" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7d/0d/549bd94f1a0a402dc8cf64563a117c0f3765662e2e668477624baeec44d5/pytest-9.0.3.tar.gz", hash = "sha256:b86ada508af81d19edeb213c681b1d48246c1a91d304c6c81a427674c17eb91c", size = 1572165, upload-time = "2026-04-07T17:16:18.027Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d4/24/a372aaf5c9b7208e7112038812994107bc65a84cd00e0354a88c2c77a617/pytest-9.0.3-py3-none-any.whl", hash = "sha256:2c5efc453d45394fdd706ade797c0a81091eccd1d6e4bccfcd476e2b8e0ab5d9", size = 375249, upload-time = "2026-04-07T17:16:16.13Z" },
 ]
 
 [[package]]
