@@ -31,7 +31,9 @@ def _raw_files(wiki_root: Path, data_root: Path) -> list[dict]:
     for f in sorted(raw.rglob("*")):
         if f.is_file() and not f.name.startswith("."):
             slug = fs.file_slug(f.stem)
-            ingested = (wiki_root / "sources" / f"{slug}.md").exists()
+            record = source_registry.find_record_for_source(data_root, f)
+            ingested = bool(record and source_registry.record_is_complete(record, wiki_root))
+            partial = (wiki_root / "sources" / f"{slug}.md").exists() and not ingested
             files.append({
                 "path": f,
                 "name": f.name,
@@ -39,6 +41,7 @@ def _raw_files(wiki_root: Path, data_root: Path) -> list[dict]:
                 "size": _fmt_size(f.stat().st_size),
                 "slug": slug,
                 "ingested": ingested,
+                "partial": partial,
             })
     return files
 
@@ -95,7 +98,9 @@ async def upload_file(files: list[UploadFile] = File(...)):
         source_registry.register_uploaded_source(data_root, dest)
 
         slug = fs.file_slug(dest.stem)
-        ingested = (wiki_root / "sources" / f"{slug}.md").exists()
+        record = source_registry.find_record_for_source(data_root, dest)
+        ingested = bool(record and source_registry.record_is_complete(record, wiki_root))
+        partial = (wiki_root / "sources" / f"{slug}.md").exists() and not ingested
         file_info = {
             "path": dest,
             "name": dest.name,
@@ -103,6 +108,7 @@ async def upload_file(files: list[UploadFile] = File(...)):
             "size": _fmt_size(len(content)),
             "slug": slug,
             "ingested": ingested,
+            "partial": partial,
         }
         rows_html.append(
             templates.env.get_template("partials/file_row.html").render({"f": file_info})

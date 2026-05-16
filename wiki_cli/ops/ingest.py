@@ -43,14 +43,20 @@ def run_ingest(
 
     # ── 중복 검사 ─────────────────────────────────────────────────────────────
     existing_page = fs.wiki_dir(wiki_root) / "sources" / f"{slug}.md"
-    if existing_page.exists():
+    if data_root is not None:
+        if source_registry.source_is_ingested(data_root, wiki_root, source):
+            raise DuplicateSourceError(
+                f"'{slug}'은(는) 이미 ingest되었습니다 ({existing_page}). "
+                "다시 처리하려면 해당 registry 기록과 파일을 정리 후 재시도하세요."
+            )
+    elif existing_page.exists():
         raise DuplicateSourceError(
             f"'{slug}'은(는) 이미 ingest되었습니다 ({existing_page}). "
             "다시 처리하려면 해당 파일을 삭제 후 재시도하세요."
         )
 
     if data_root is not None:
-        duplicate = source_registry.find_ingested_duplicate(data_root, source)
+        duplicate = source_registry.find_ingested_duplicate(data_root, source, wiki_root)
         if duplicate is not None:
             raise DuplicateSourceError(
                 f"동일한 내용의 소스가 이미 ingest되었습니다: "
@@ -164,9 +170,12 @@ Output a markdown file with YAML frontmatter (bare --- block, NOT inside a code 
 ---
 title: <document title>
 type: source
-tags: [tag1, tag2]
+tags: [tag-one, tag-two]
 sources: ["{source.name}"]
 ---
+
+Tags must be Obsidian-compatible list values: lowercase words with no spaces.
+Use hyphens for multi-word tags, for example `large-language-models`.
 
 # <title>
 
@@ -362,9 +371,12 @@ The title field MUST be exactly "{display_name}" — do not change it.
 ---
 title: "{display_name}"
 type: {kind[:-1]}
-tags: [tag1, tag2]
+tags: [tag-one, tag-two]
 sources: ["{source_name}"]
 ---
+
+Tags must be Obsidian-compatible list values: lowercase words with no spaces.
+Use hyphens for multi-word tags, for example `large-language-models`.
 
 # {display_name}
 

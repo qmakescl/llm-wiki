@@ -101,19 +101,47 @@ def register_uploaded_source(data_root: Path, source: Path) -> dict[str, Any]:
     return record
 
 
-def find_ingested_duplicate(data_root: Path, source: Path) -> dict[str, Any] | None:
+def find_ingested_duplicate(
+    data_root: Path,
+    source: Path,
+    wiki_root: Path | None = None,
+) -> dict[str, Any] | None:
     """Return an already-ingested record with the same content hash, if any."""
     digest = sha256_file(source)
     rel = relative_source_path(data_root, source.resolve())
     for record in load_records(data_root):
         if record.get("sha256") != digest:
             continue
-        if not record.get("ingested_at"):
+        if not record_is_complete(record, wiki_root):
             continue
         if record.get("relative_path") == rel:
             continue
         return record
     return None
+
+
+def find_record_for_source(data_root: Path, source: Path) -> dict[str, Any] | None:
+    """Return the registry row for a source path, if present."""
+    rel = relative_source_path(data_root, source.resolve())
+    for record in load_records(data_root):
+        if record.get("relative_path") == rel:
+            return record
+    return None
+
+
+def record_is_complete(record: dict[str, Any], wiki_root: Path | None = None) -> bool:
+    """A source is complete only after mark_ingested and an existing summary page."""
+    if not record.get("ingested_at") or not record.get("summary_page"):
+        return False
+    if wiki_root is None:
+        return True
+    return (wiki_root / str(record["summary_page"])).exists()
+
+
+def source_is_ingested(data_root: Path, wiki_root: Path, source: Path) -> bool:
+    """Return True when the exact source path has a complete ingest record."""
+    record = find_record_for_source(data_root, source)
+    return bool(record and record_is_complete(record, wiki_root))
 
 
 def mark_ingested(

@@ -110,3 +110,33 @@ def test_write_page_sets_aliases_from_title(wiki_root):
     meta, _ = fs.read_page(page)
     assert meta["aliases"] == ["Bert Model"]
     assert meta["created"] == meta["updated"]
+
+
+def test_write_page_normalizes_obsidian_tags(wiki_root):
+    page = wiki_root / "concepts" / "Tag Test.md"
+    fs.write_page(
+        page,
+        {
+            "title": "Tag Test",
+            "type": "concept",
+            "tags": ["Machine Learning", "#AI/Agents", "2026 Research", "AI/Agents"],
+        },
+        "# Tag Test",
+    )
+
+    meta, _ = fs.read_page(page)
+
+    assert meta["tags"] == ["machine-learning", "ai/agents", "tag-2026-research"]
+
+
+def test_write_page_normalizes_scalar_tag_values(wiki_root):
+    page = wiki_root / "sources" / "paper.md"
+    fs.write_page(
+        page,
+        {"title": "Paper", "type": "source", "tags": "#LLM #RAG, Research Notes"},
+        "# Paper",
+    )
+
+    meta, _ = fs.read_page(page)
+
+    assert meta["tags"] == ["llm", "rag", "research-notes"]

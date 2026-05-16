@@ -107,9 +107,10 @@ def read_page(path: Path) -> tuple[dict, str]:
 
 
 def write_page(path: Path, metadata: dict, body: str) -> None:
-    """Write a wiki page with YAML frontmatter."""
+    """Write a wiki page with Obsidian-compatible YAML frontmatter."""
     path.parent.mkdir(parents=True, exist_ok=True)
     today = str(date.today())
+    metadata = _normalize_frontmatter(metadata)
     metadata.setdefault("created", today)
     metadata["updated"] = today
     # title이 있으면 Obsidian 위키링크 해결을 위해 aliases 자동 추가
@@ -118,6 +119,69 @@ def write_page(path: Path, metadata: dict, body: str) -> None:
 
     post = fm.Post(body, **metadata)
     path.write_text(fm.dumps(post), encoding="utf-8")
+
+
+def _normalize_frontmatter(metadata: dict) -> dict:
+    """Normalize metadata emitted by LLMs before writing Obsidian notes."""
+    normalized = dict(metadata)
+    if "tags" in normalized:
+        normalized["tags"] = _normalize_tags(normalized.get("tags"))
+    return normalized
+
+
+def _normalize_tags(value: object) -> list[str]:
+    """Return Obsidian tag property values without spaces or invalid chars."""
+    tags: list[str] = []
+    for raw in _iter_tag_values(value):
+        tag = _normalize_tag(raw)
+        if tag and tag not in tags:
+            tags.append(tag)
+    return tags
+
+
+def _iter_tag_values(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        if "," in text or ";" in text:
+            items: list[str] = []
+            for part in re.split(r"[,;]+", text):
+                items.extend(_iter_tag_values(part))
+            return items
+        hash_tags = re.findall(r"#[^\s#,\];]+", text)
+        if hash_tags and len(hash_tags) > 1:
+            return hash_tags
+        return [text]
+    if isinstance(value, (list, tuple, set)):
+        items: list[str] = []
+        for item in value:
+            items.extend(_iter_tag_values(item))
+        return items
+    return [str(value)]
+
+
+def _normalize_tag(raw: str) -> str:
+    tag = raw.strip().lstrip("#").strip()
+    tag = re.sub(r"\s+", "-", tag.lower())
+
+    chars: list[str] = []
+    for ch in tag:
+        if ch.isalpha() or ch.isdigit() or ch in {"_", "-", "/"}:
+            chars.append(ch)
+        else:
+            chars.append("-")
+
+    tag = re.sub(r"-{2,}", "-", "".join(chars))
+    parts = [part.strip("-_") for part in tag.split("/") if part.strip("-_")]
+    fixed_parts = []
+    for part in parts:
+        if part and part[0].isdigit():
+            part = f"tag-{part}"
+        fixed_parts.append(part)
+    return "/".join(fixed_parts)
 
 
 def list_pages(root: Path) -> list[Path]:
