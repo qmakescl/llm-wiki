@@ -159,3 +159,129 @@ uv run pytest tests/test_structured_ingest.py
 tests/test_fs.py: 14 passed
 tests/test_structured_ingest.py: 6 passed
 ```
+
+## 추가 변경: 본문 한국어 작성 정책
+
+wiki 문서의 link 안정성과 Obsidian 호환성을 위해 title, filename, tag, source, alias, wikilink target은 영어 또는 원문을 유지하되, 사람이 읽는 본문은 한국어로 작성하도록 LLM 프롬프트 정책을 추가했다.
+
+정책:
+
+- YAML frontmatter, page title, filename, tag, source, alias는 영어/원문 유지
+- `[[wikilink target]]`은 대상 page title과 정확히 일치해야 하므로 번역하지 않음
+- 본문 설명, 요약, bullet, query 답변은 한국어로 작성
+- technical term, model name, paper title, organization name, product name, established concept name은 한국어 문장 안에서도 영어/원문 유지
+
+### 추가 수정 파일
+
+| 파일 | 변경 내용 |
+|---|---|
+| `wiki_cli/ops/ingest.py` | source/entity/concept 생성 및 update 프롬프트에 한국어 본문 작성 정책 추가 |
+| `wiki_cli/structured_ingest.py` | 구조화 ingest JSON 설명 필드는 한국어, title/slug는 영어/원문 유지하도록 지시하고 source page heading 일부 한국어화 |
+| `wiki_cli/ops/query.py` | query 답변 프롬프트에 한국어 답변 및 wikilink 원문 유지 정책 추가 |
+| `tests/test_structured_ingest.py` | 구조화 ingest 프롬프트와 생성 page heading 회귀 테스트 추가 |
+| `tests/test_query.py` | query 프롬프트의 한국어 답변 정책 회귀 테스트 추가 |
+| `docs/fix/2026-05-16-ingest-completion.md` | 본 추가 변경 기록 |
+
+### 추가 검증
+
+```bash
+uv run pytest tests/test_structured_ingest.py tests/test_query.py
+uv run pytest tests/test_fs.py tests/test_search_index.py
+```
+
+결과:
+
+```text
+tests/test_structured_ingest.py tests/test_query.py: 8 passed
+tests/test_fs.py tests/test_search_index.py: 18 passed
+```
+
+## 추가 변경: 출력 언어 설정 및 Heading 원문 유지 옵션
+
+본문 한국어 작성 정책을 고정 프롬프트에서 설정 기반 정책으로 확장했다.
+
+설정 메뉴에서 다음 값을 선택할 수 있다.
+
+- 출력 언어: `한국어`, `English`, `원문 언어 유지`
+- Heading은 원문 언어 사용: 켜면 body 출력 언어와 관계없이 Markdown heading은 source/original language를 따르도록 지시
+
+동작 기준:
+
+- title, filename, tags, sources, aliases, wikilink target은 계속 영어/원문 유지
+- body prose, bullet, table, callout, query answer는 출력 언어 설정을 따름
+- heading은 기본적으로 출력 언어를 따르지만, `Heading은 원문 언어 사용`을 켜면 원문 언어 유지
+- CLI와 Web이 같은 정책을 쓰도록 `WIKI_OUTPUT_LANGUAGE`, `WIKI_HEADING_ORIGINAL_LANGUAGE` 환경변수로 ops 레이어에 전달
+
+### 추가 수정 파일
+
+| 파일 | 변경 내용 |
+|---|---|
+| `wiki_cli/language.py` | 출력 언어와 heading 정책을 LLM 프롬프트 문구로 변환하는 helper 추가 |
+| `wiki_cli/ops/ingest.py` | 고정 한국어 정책 대신 설정 기반 language policy 사용 |
+| `wiki_cli/structured_ingest.py` | 구조화 ingest prompt와 deterministic source page heading에 설정 기반 language policy 적용 |
+| `wiki_cli/ops/query.py` | query 답변 프롬프트에 설정 기반 language policy 적용 |
+| `wiki_web/config.py` | `output_language`, `heading_original_language` 기본값/저장/env 적용 추가 |
+| `wiki_web/routers/settings.py` | `/settings` 저장 폼에 출력 언어 설정 반영 |
+| `wiki_web/routers/admin.py` | `/admin/settings` 저장 폼에 출력 언어 설정 반영 |
+| `wiki_web/templates/settings.html` | 설정 메뉴에 출력 언어 radio와 heading 원문 유지 checkbox 추가 |
+| `wiki_web/templates/admin.html` | 관리 설정에도 동일한 출력 언어 UI 추가 |
+| `tests/test_language.py` | language policy helper 테스트 추가 |
+| `tests/test_config.py` | 출력 언어 설정 env 적용 테스트 추가 |
+| `tests/test_structured_ingest.py` | 설정 기반 language policy 회귀 테스트 보강 |
+| `tests/test_query.py` | query 프롬프트 language policy 회귀 테스트 보강 |
+| `docs/fix/2026-05-16-ingest-completion.md` | 본 추가 변경 기록 |
+
+### 추가 검증
+
+```bash
+uv run pytest tests/test_config.py tests/test_language.py tests/test_structured_ingest.py tests/test_query.py
+uv run pytest tests/test_smoke.py tests/test_fs.py
+```
+
+결과:
+
+```text
+tests/test_config.py tests/test_language.py tests/test_structured_ingest.py tests/test_query.py: 20 passed
+tests/test_smoke.py tests/test_fs.py: 16 passed
+```
+
+## 추가 변경: Ingest 완료 후 raw 목록 진행 UI 잔류 수정
+
+Ingest 작업 자체는 완료되어 최근 작업 패널에는 `완료`로 표시되지만, raw 파일 목록의 개별 파일 행에는 `추출 진행 중...` progress UI가 남을 수 있었다.
+
+원인:
+
+- 파일 행의 `추출` 버튼은 `partials/ingest_progress.html`로 교체된다.
+- SSE `done` 이벤트는 진행 wrapper를 완료 상태로 교체하지 않고, 내부의 작은 완료 텍스트 영역만 갱신했다.
+- 따라서 registry 완료 기록이 생성되어도 현재 화면의 파일 행은 다시 렌더링되지 않아 progress/log UI가 남아 있었다.
+
+수정:
+
+- `IngestJob`에 `slug`를 저장한다.
+- `/documents/ingest/{job_id}/stream`의 `done` 이벤트가 성공 시 완료 badge HTML을 내려준다.
+- 실패 시 같은 위치에 `실패` badge와 `다시 Ingest` 버튼을 내려준다.
+- `partials/ingest_progress.html`의 root wrapper가 `done` 이벤트에서 `outerHTML`로 교체되도록 변경했다.
+
+### 추가 수정 파일
+
+| 파일 | 변경 내용 |
+|---|---|
+| `wiki_web/progress.py` | `IngestJob`에 slug 저장 |
+| `wiki_web/routers/documents.py` | SSE done 이벤트에서 완료/실패 컨트롤 HTML 반환 |
+| `wiki_web/templates/partials/ingest_progress.html` | 완료 이벤트가 진행 wrapper 전체를 교체하도록 수정 |
+| `tests/test_documents_router.py` | 완료/실패 컨트롤 HTML과 progress template 교체 동작 회귀 테스트 추가 |
+| `docs/fix/2026-05-16-ingest-completion.md` | 본 추가 변경 기록 |
+
+### 추가 검증
+
+```bash
+uv run pytest tests/test_documents_router.py tests/test_progress.py
+uv run pytest tests/test_smoke.py
+```
+
+결과:
+
+```text
+tests/test_documents_router.py tests/test_progress.py: 5 passed
+tests/test_smoke.py: 2 passed
+```

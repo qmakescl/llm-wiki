@@ -59,7 +59,19 @@ def test_to_overview_renders_compact_markdown():
     assert "Maybe stale" in overview
 
 
-def test_render_source_page_from_structured_result():
+def test_prompt_for_structured_ingest_preserves_english_titles_and_requests_korean_prose(monkeypatch):
+    monkeypatch.setenv("WIKI_OUTPUT_LANGUAGE", "ko")
+    monkeypatch.delenv("WIKI_HEADING_ORIGINAL_LANGUAGE", raising=False)
+    prompt = structured_ingest.prompt_for_structured_ingest("schema", "paper.txt")
+
+    assert "Keep titles and slugs in English" in prompt
+    assert "Write human-facing body prose in Korean" in prompt
+    assert "technical terms" in prompt
+
+
+def test_render_source_page_from_structured_result(monkeypatch):
+    monkeypatch.setenv("WIKI_OUTPUT_LANGUAGE", "ko")
+    monkeypatch.delenv("WIKI_HEADING_ORIGINAL_LANGUAGE", raising=False)
     parsed = structured_ingest.parse_structured_result(json.dumps({
         "summary": "summary",
         "claims": [{"claim": "Claim A", "evidence": "Quote A"}],
@@ -72,11 +84,14 @@ def test_render_source_page_from_structured_result():
 
     assert meta["title"] == "paper"
     assert meta["type"] == "source"
+    assert "## 요약" in body
     assert "[[OpenAI]]" in body
     assert "Claim A" in body
 
 
 def test_run_ingest_structured_path_skips_planning_llm(tmp_path, monkeypatch):
+    monkeypatch.setenv("WIKI_OUTPUT_LANGUAGE", "ko")
+    monkeypatch.delenv("WIKI_HEADING_ORIGINAL_LANGUAGE", raising=False)
     wiki_root = tmp_path / "wiki"
     wiki_root.mkdir()
     (wiki_root / "AGENTS.md").write_text("schema", encoding="utf-8")
@@ -96,6 +111,8 @@ def test_run_ingest_structured_path_skips_planning_llm(tmp_path, monkeypatch):
         prompts.append(prompt)
         assert "Based on this source overview" not in prompt
         assert "Write a wiki page summarising" not in prompt
+        assert "Write human-facing body prose in Korean" in prompt
+        assert "Do not translate [[wikilink targets]]" in prompt
         if "Create a new wiki page for:" in prompt:
             title = prompt.split("Create a new wiki page for:", 1)[1].splitlines()[0].strip()
             return f"""---

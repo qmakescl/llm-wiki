@@ -407,6 +407,29 @@ function updateAdminProviderFields() {
       </div>
 
       <div>
+        <div class="section-title" style="margin-bottom:10px">문서 출력 언어</div>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          {% for value, label in output_languages %}
+          <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; font-size:13.5px">
+            <input type="radio" name="output_language" value="{{ value }}"
+                   {% if cfg.get('output_language', 'ko') == value %}checked{% endif %}
+                   style="width:14px; height:14px; accent-color:var(--accent); margin-top:2px; cursor:pointer; flex-shrink:0">
+            <span>{{ label }}</span>
+          </label>
+          {% endfor %}
+          <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; font-size:13.5px; margin-top:4px; padding-top:10px; border-top:1px solid var(--border)">
+            <input type="checkbox" name="heading_original_language" value="on"
+                   {% if cfg.get('heading_original_language', false) %}checked{% endif %}
+                   style="width:15px; height:15px; accent-color:var(--accent); margin-top:2px; cursor:pointer; flex-shrink:0">
+            <span>Heading은 원문 언어 사용</span>
+          </label>
+          <div class="form-hint">
+            제목, 태그, 파일명, source, alias, wikilink target은 영어/원문을 유지하고 본문 출력 언어만 조정합니다.
+          </div>
+        </div>
+      </div>
+
+      <div>
         <div class="section-title" style="margin-bottom:10px">검색 방식</div>
         <div style="display:flex; flex-direction:column; gap:8px">
           {% for value, label in search_tiers %}

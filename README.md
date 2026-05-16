@@ -54,6 +54,19 @@ Ingest 중 다른 페이지로 이동해도 서버에서 계속 처리됩니다.
 PDF·텍스트 추출 결과와 동일 파일/동일 프롬프트의 `call_with_file()` 결과는 source hash 기준으로 캐시됩니다.  
 중간 실패 후 재시도하거나 같은 문서를 디버깅할 때 초기 분석 비용을 줄일 수 있습니다.
 
+### 출력 언어 설정
+
+Markdown 문서와 query 답변의 출력 언어를 설정에서 선택할 수 있습니다.
+
+| 설정 | 설명 |
+|---|---|
+| 한국어 | 본문, bullet, table, callout, query 답변을 한국어로 작성 |
+| English | 본문과 답변을 영어로 작성 |
+| 원문 언어 유지 | source 문서의 원문 언어를 최대한 유지 |
+
+제목, 파일명, tags, sources, aliases, `[[wikilink target]]`은 Obsidian 링크 안정성을 위해 영어 또는 원문을 유지합니다.  
+`Heading은 원문 언어 사용` 옵션을 켜면 본문 출력 언어와 별개로 Markdown heading은 원문 언어를 따릅니다.
+
 ### Source Registry
 
 업로드된 원본은 `data/{domain}/sources.jsonl`에 `sha256`, 파일 크기, ingest 시각, summary page, model 정보와 함께 기록됩니다.  
@@ -101,7 +114,7 @@ export WIKI_OBSIDIAN_SYNC=on    # 활성화 (기본값)
 | `/documents` | 파일 업로드(드래그앤드롭) + Ingest + 작업 상태 |
 | `/query` | 질문 입력 → LLM 답변 (synthesis/ 저장 옵션) |
 | `/lint` | 위키 건강 검사 — 고아 페이지, TODO, 모순 탐지 |
-| `/settings` | LLM 모델, API 키, 검색 방식 설정 |
+| `/settings` | LLM 모델, API 키, 검색 방식, 출력 언어 설정 |
 | `/admin` | 도메인 CRUD, 위키 초기화, 청킹 설정 |
 
 ---
@@ -120,6 +133,15 @@ export WIKI_OBSIDIAN_SYNC=on    # 활성화 (기본값)
 # CLI에서 일시적으로 모델 지정
 wiki ingest paper.pdf --model claude-sonnet-4-20250514
 ```
+
+### 출력 언어 환경변수
+
+웹 UI 설정이 우선이지만 CLI 환경에서 직접 지정할 수도 있습니다.
+
+| 환경변수 | 값 | 설명 |
+|---|---|---|
+| `WIKI_OUTPUT_LANGUAGE` | `ko`, `en`, `source` | Markdown 본문과 query 답변 출력 언어 |
+| `WIKI_HEADING_ORIGINAL_LANGUAGE` | `on`, `off` | `on`이면 Markdown heading은 원문 언어 사용 |
 
 ---
 
@@ -199,7 +221,9 @@ my-research/
   "search_tier": "grep",
   "chunk_strategy": "section",
   "chunk_size": 500,
-  "chunk_overlap": 100
+  "chunk_overlap": 100,
+  "output_language": "ko",
+  "heading_original_language": false
 }
 ```
 
@@ -218,6 +242,7 @@ wiki_cli/              CLI + ops 핵심 로직
 ├── fs.py              파일시스템 헬퍼
 ├── source_registry.py 원본 파일 hash registry
 ├── structured_ingest.py 구조화 ingest 추출/파싱
+├── language.py        Markdown 출력 언어 정책
 └── ops/
     ├── ingest.py      5단계 LLM Ingest 파이프라인
     ├── query.py       질문-답변 파이프라인
@@ -280,13 +305,14 @@ pip install -e ".[dev]"       # 개발 환경 (pytest 포함)
 
 ## 현재 버전
 
-**v0.3** (2026-05-15) — current
+**v0.3.1** (2026-05-16) — current
 
 | 항목 | 상태 |
 |---|---|
 | GitHub | [qmakescl/llm-wiki](https://github.com/qmakescl/llm-wiki) |
-| 테스트 | 주요 회귀 테스트 통과 |
-| 릴리스 패키지 | GitHub `v0.3` 등록 |
+| 테스트 | `77 passed` |
+| 주요 변경 | Markdown 생성 및 query 답변의 희망 출력 언어 설정 |
+| 변경 기록 | [`CHANGELOG.md`](CHANGELOG.md) |
 
 ---
 

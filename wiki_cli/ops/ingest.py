@@ -12,7 +12,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from wiki_cli import llm, fs, source_registry, structured_ingest
+from wiki_cli import llm, fs, language, source_registry, structured_ingest
 from wiki_cli.metrics import Metrics
 from wiki_cli.obsidian_sync import trigger_sync
 
@@ -25,7 +25,6 @@ Always respond with valid markdown.
 For internal links use [[Exact Page Title]] syntax — the title must match the target page's title field EXACTLY (including capitalization). For example [[Google Agentspace]], [[Agentic AI]]. Never use file slugs such as [[google-agentspace]].
 Be precise, cite specific claims, and flag uncertainty with ⚠️.
 Always output YAML frontmatter as a bare --- block, never inside a ```yaml code fence."""
-
 
 class DuplicateSourceError(Exception):
     """이미 ingest된 소스 파일을 다시 처리하려 할 때 발생."""
@@ -103,9 +102,13 @@ def run_ingest(
             logger.warning("structured ingest extraction failed; using legacy overview flow: %s", source.name)
             overview = raw_overview
 
+        lang_policy = language.language_policy()
+
         if not overview.strip():
             summary_prompt = f"""
 {schema}
+
+{lang_policy}
 
 Read the following source document and extract:
 1. A 3-sentence summary
@@ -152,6 +155,8 @@ Source: {source.name}
             source_page_prompt = f"""
 {schema}
 
+{lang_policy}
+
 Write a wiki page summarising this source document.
 Use this analysis as your basis:
 
@@ -180,16 +185,16 @@ Use hyphens for multi-word tags, for example `large-language-models`.
 # <title>
 
 ## Summary
-(3-5 sentences)
+(3-5 sentences in the configured output language; keep technical terms in English/original form)
 
 ## Key contributions
-- bullet points
+- bullet points in the configured output language
 
 ## Entities mentioned
-- [[Exact Entity Name]] — brief note
+- [[Exact Entity Name]] — brief note in the configured output language
 
 ## Key concepts
-- [[Exact Concept Name]] — brief note
+- [[Exact Concept Name]] — brief note in the configured output language
 
 ## Notes & uncertainties
 (optional)
@@ -301,6 +306,8 @@ def _plan_related_pages(
     prompt = f"""
 {schema}
 
+{language.language_policy()}
+
 Based on this source overview, list:
 1. Entity pages that should be created or updated (people, models, datasets, institutions)
 2. Concept pages that should be created or updated
@@ -360,6 +367,8 @@ def _write_or_update_page(
         prompt = f"""
 {schema}
 
+{language.language_policy()}
+
 Create a new wiki page for: {display_name}
 Kind: {kind[:-1]}
 
@@ -380,7 +389,7 @@ Use hyphens for multi-word tags, for example `large-language-models`.
 
 # {display_name}
 
-<content using [[Exact Page Title]] wikilinks, ⚠️ for uncertainties>
+<Body content in the configured output language using [[Exact Page Title]] wikilinks, English/original technical terms, and ⚠️ for uncertainties>
 """
         if metrics:
             with metrics.timer("ingest.related_page_llm"):
@@ -395,6 +404,8 @@ Use hyphens for multi-word tags, for example `large-language-models`.
         # 증분 업데이트: 관련 evidence만 전달, 새 내용만 출력 요청
         delta_prompt = f"""
 {schema}
+
+{language.language_policy()}
 
 New evidence about "{display_name}" from source "{source_name}":
 {evidence}
@@ -411,6 +422,7 @@ NEW_SECTION: <New Section Title>
 <full content for a new section>
 
 Use [[Exact Page Title]] wikilinks, ⚠️ for uncertainties.
+Write additions in the configured output language while preserving technical terms and wikilink targets in English/original form.
 If there is nothing new to add, output exactly: NO_UPDATE
 """
         if metrics:

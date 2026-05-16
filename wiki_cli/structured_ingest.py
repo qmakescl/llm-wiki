@@ -15,7 +15,7 @@ from typing import Any, TypedDict
 
 import yaml
 
-from wiki_cli import fs, llm
+from wiki_cli import fs, language, llm
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,10 @@ def prompt_for_structured_ingest(schema: str, source_name: str) -> str:
 
 Read the source document and return ONLY valid JSON. Do not wrap it in a code
 fence. Keep evidence short and specific. Prefer stable page titles over slugs.
+{language.language_policy()}
+Keep titles and slugs in English or the source's original language. Apply the
+language policy to summary, claim, entity/concept summary, uncertainty, and
+conflict prose.
 
 Required JSON shape:
 {{
@@ -170,10 +174,10 @@ def render_source_page(
     }
     lines = [f"# {title}", ""]
     if summary := result.get("summary"):
-        lines += ["## Summary", summary, ""]
+        lines += [f"## {language.heading_label('요약', 'Summary')}", summary, ""]
     claims = result.get("claims", [])
     if claims:
-        lines += ["## Key contributions"]
+        lines += [f"## {language.heading_label('주요 기여', 'Key Contributions')}"]
         for item in claims:
             claim = str(item.get("claim") or item.get("text") or "").strip()
             evidence = str(item.get("evidence") or "").strip()
@@ -183,21 +187,21 @@ def render_source_page(
                 lines.append(f"- {claim}")
         lines.append("")
     if result.get("entities"):
-        lines += ["## Entities mentioned"]
+        lines += [f"## {language.heading_label('언급된 Entities', 'Entities Mentioned')}"]
         for brief in result.get("entities", []):
             title = brief.get("title") or brief.get("slug") or "Untitled"
             summary = brief.get("summary") or ""
             lines.append(f"- [[{title}]]" + (f" — {summary}" if summary else ""))
         lines.append("")
     if result.get("concepts"):
-        lines += ["## Key concepts"]
+        lines += [f"## {language.heading_label('핵심 Concepts', 'Key Concepts')}"]
         for brief in result.get("concepts", []):
             title = brief.get("title") or brief.get("slug") or "Untitled"
             summary = brief.get("summary") or ""
             lines.append(f"- [[{title}]]" + (f" — {summary}" if summary else ""))
         lines.append("")
     if result.get("uncertainties"):
-        lines += ["## Notes & uncertainties"]
+        lines += [f"## {language.heading_label('메모와 불확실성', 'Notes & Uncertainties')}"]
         for item in result.get("uncertainties", []):
             note = str(item.get("note") or item.get("claim") or "").strip()
             if note:

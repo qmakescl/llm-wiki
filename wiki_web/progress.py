@@ -18,10 +18,17 @@ from datetime import datetime
 
 
 class IngestJob:
-    def __init__(self, job_id: str, filename: str, domain_name: str = "") -> None:
+    def __init__(
+        self,
+        job_id: str,
+        filename: str,
+        domain_name: str = "",
+        slug: str = "",
+    ) -> None:
         self.id = job_id
         self.filename = filename
         self.domain_name = domain_name
+        self.slug = slug
         self.status = "running"          # running | done | failed
         self.messages: list[str] = []    # 누적 HTML 메시지
         self.started_at = datetime.now().strftime("%H:%M:%S")
@@ -97,8 +104,13 @@ class IngestJob:
 _store: dict[str, IngestJob] = {}
 
 
-def create_job(job_id: str, filename: str, domain_name: str = "") -> IngestJob:
-    job = IngestJob(job_id, filename, domain_name)
+def create_job(
+    job_id: str,
+    filename: str,
+    domain_name: str = "",
+    slug: str = "",
+) -> IngestJob:
+    job = IngestJob(job_id, filename, domain_name, slug)
     _store[job_id] = job
     cleanup_old_jobs()
     return job

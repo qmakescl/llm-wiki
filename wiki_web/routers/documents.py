@@ -133,7 +133,7 @@ async def start_ingest(request: Request, slug: str):
         )
 
     job_id = str(uuid.uuid4())[:8]
-    job = jobs.create_job(job_id, source.name, domain_name)
+    job = jobs.create_job(job_id, source.name, domain_name, slug)
 
     settings = cfg.load()
     model = settings.get("model") or None
@@ -154,7 +154,7 @@ async def start_ingest(request: Request, slug: str):
     return templates.TemplateResponse(
         request,
         "partials/ingest_progress.html",
-        {"job_id": job_id, "filename": source.name},
+        {"job_id": job_id, "filename": source.name, "slug": slug},
     )
 
 
@@ -168,14 +168,36 @@ async def ingest_stream(job_id: str):
     async def event_stream():
         async for chunk in job.stream():
             yield chunk
-        done_class = "ingest-ok" if job.status == "done" else "ingest-err"
-        done_text = "완료 ✓" if job.status == "done" else "실패 ✗"
-        yield f"event: done\ndata: <span class='{done_class}'>{done_text}</span>\n\n"
+        yield f"event: done\ndata: {_done_control_html(job)}\n\n"
 
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+def _done_control_html(job: jobs.IngestJob) -> str:
+    if job.status == "done":
+        return (
+            '<span class="badge badge-success">완료 '
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" '
+            'stroke="currentColor" stroke-width="2.5" stroke-linecap="round" '
+            'stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+            "</span>"
+        )
+    return (
+        f'<div id="ingest-ctrl-{job.slug}" style="display:flex; align-items:center; gap:8px">'
+        '<span class="badge badge-warning">실패</span>'
+        f'<button class="btn btn-secondary btn-sm" hx-post="/documents/ingest/{job.slug}" '
+        f'hx-target="#ingest-ctrl-{job.slug}" hx-swap="outerHTML" '
+        f'hx-indicator="#spin-{job.slug}">다시 Ingest</button>'
+        f'<span id="spin-{job.slug}" class="htmx-indicator" '
+        'style="font-size:12px; color:var(--text-muted)">'
+        '<span class="step-spin"><svg width="12" height="12" viewBox="0 0 24 24" '
+        'fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">'
+        '<path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></span> 시작 중...'
+        "</span></div>"
     )
 
 

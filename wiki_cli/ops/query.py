@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from wiki_cli import llm, fs, search, search_index
+from wiki_cli import fs, language, llm, search, search_index
 from wiki_cli.metrics import Metrics
 from wiki_cli.obsidian_sync import trigger_sync
 
@@ -21,7 +21,6 @@ _SYSTEM = """You are a precise research assistant with access to a personal wiki
 Answer questions using only information from the provided wiki pages.
 Cite sources using [[PageName]] links. Be concise but thorough.
 If the wiki doesn't contain enough information, say so clearly."""
-
 
 def run_query(
     wiki_root: Path,
@@ -62,6 +61,8 @@ def run_query(
         p.update(task, description="답변 생성 중...")
         prompt = f"""
 {schema}
+
+{language.language_policy(answer=True)}
 
 Wiki index overview:
 {index_content[:2000]}

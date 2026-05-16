@@ -33,6 +33,8 @@ DEFAULTS: dict = {
     "chunk_size": 500,
     "chunk_overlap": 100,
     "obsidian_sync": True,
+    "output_language": "ko",
+    "heading_original_language": False,
 }
 
 LLM_PROVIDERS = [
@@ -72,6 +74,12 @@ CHUNK_STRATEGIES = [
     ("section", "섹션 분할 (기본 — 헤더/단락 경계로 분리)"),
     ("fixed", "고정 길이 분할 (문서 유형 무관, 글자 수로 분리)"),
     ("none", "분할 없음 (짧은 문서 전용, 초과 시 앞부분만 처리)"),
+]
+
+OUTPUT_LANGUAGES = [
+    ("ko", "한국어"),
+    ("en", "English"),
+    ("source", "원문 언어 유지"),
 ]
 
 
@@ -152,6 +160,13 @@ def apply_env(cfg: dict) -> None:
     os.environ["WIKI_CHUNK_OVERLAP"] = str(cfg.get("chunk_overlap") or 100)
 
     os.environ["WIKI_OBSIDIAN_SYNC"] = "on" if cfg.get("obsidian_sync", True) else "off"
+    output_language = cfg.get("output_language") or "ko"
+    if output_language not in {value for value, _label in OUTPUT_LANGUAGES}:
+        output_language = "ko"
+    os.environ["WIKI_OUTPUT_LANGUAGE"] = output_language
+    os.environ["WIKI_HEADING_ORIGINAL_LANGUAGE"] = (
+        "on" if cfg.get("heading_original_language", False) else "off"
+    )
 
 
 # ── 도메인 헬퍼 ─────────────────────────────────────────────────────────────
@@ -309,6 +324,8 @@ def save_runtime_settings(
     chunk_size: int,
     chunk_overlap: int,
     obsidian_sync: bool = True,
+    output_language: str = "ko",
+    heading_original_language: bool = False,
 ) -> dict:
     """`/settings`와 `/admin/settings`가 공유하는 저장 로직.
 
@@ -319,6 +336,8 @@ def save_runtime_settings(
     final_model = _normalize_model(final_provider, model, model_custom)
     size = max(100, int(chunk_size))
     overlap = max(0, min(int(chunk_overlap), size - 1))
+    allowed_languages = {value for value, _label in OUTPUT_LANGUAGES}
+    final_output_language = output_language if output_language in allowed_languages else "ko"
 
     c = load()
     c.update({
@@ -334,6 +353,8 @@ def save_runtime_settings(
         "chunk_size": size,
         "chunk_overlap": overlap,
         "obsidian_sync": obsidian_sync,
+        "output_language": final_output_language,
+        "heading_original_language": heading_original_language,
     })
     save(c)
     apply_env(c)

@@ -102,6 +102,7 @@ async def admin_page(request: Request):
             "model_presets": model_presets,
             "ollama_models": ollama_models,
             "search_tiers": cfg.SEARCH_TIERS,
+            "output_languages": cfg.OUTPUT_LANGUAGES,
             "is_custom": is_custom,
             "saved": request.query_params.get("saved") == "1",
             "error": request.query_params.get("error", ""),
@@ -328,6 +329,8 @@ async def save_settings(
     chunk_strategy: str = Form("section"),
     chunk_size: int = Form(500),
     chunk_overlap: int = Form(100),
+    output_language: str = Form("ko"),
+    heading_original_language: str = Form(""),
 ):
     cfg.save_runtime_settings(
         llm_provider=llm_provider,
@@ -342,5 +345,7 @@ async def save_settings(
         chunk_strategy=chunk_strategy,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
+        output_language=output_language,
+        heading_original_language=(heading_original_language == "on"),
     )
     return RedirectResponse("/admin?saved=1", status_code=303)

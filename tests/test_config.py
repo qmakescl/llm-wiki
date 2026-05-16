@@ -113,6 +113,8 @@ def test_save_runtime_settings_applies_env(isolated_config, monkeypatch):
     import os
     assert os.environ["WIKI_MODEL"] == "gpt-4o"
     assert os.environ["WIKI_CHUNK_STRATEGY"] == "section"
+    assert os.environ["WIKI_OUTPUT_LANGUAGE"] == "ko"
+    assert os.environ["WIKI_HEADING_ORIGINAL_LANGUAGE"] == "off"
 
 
 def test_save_runtime_settings_custom_model(isolated_config):
@@ -132,6 +134,8 @@ def test_save_runtime_settings_custom_model(isolated_config):
         chunk_strategy="section",
         chunk_size=500,
         chunk_overlap=100,
+        output_language="en",
+        heading_original_language=True,
     )
     assert saved["model"] == "ollama/gemma4:31b"
 
@@ -176,3 +180,32 @@ def test_save_runtime_settings_external_provider_env(isolated_config, monkeypatc
     assert os.environ["GOOGLE_API_KEY"] == "google-key"
     assert os.environ["GEMINI_API_KEY"] == "google-key"
     assert os.environ["OPENROUTER_API_KEY"] == "openrouter-key"
+
+
+def test_save_runtime_settings_applies_language_env(isolated_config):
+    cfg = isolated_config
+    cfg.save({
+        "workspace_root": "/tmp/ws",
+        "domains": [{"id": "a", "name": "A", "folder": "a"}],
+        "active_domain_id": "a",
+    })
+
+    saved = cfg.save_runtime_settings(
+        model="gpt-4o",
+        model_custom="",
+        search_tier="grep",
+        ollama_base_url="http://localhost:11434",
+        openai_api_key="",
+        anthropic_api_key="",
+        chunk_strategy="section",
+        chunk_size=500,
+        chunk_overlap=100,
+        output_language="en",
+        heading_original_language=True,
+    )
+
+    import os
+    assert saved["output_language"] == "en"
+    assert saved["heading_original_language"] is True
+    assert os.environ["WIKI_OUTPUT_LANGUAGE"] == "en"
+    assert os.environ["WIKI_HEADING_ORIGINAL_LANGUAGE"] == "on"

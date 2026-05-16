@@ -34,6 +34,7 @@ async def settings_page(request: Request, saved: bool = False):
             "ollama_models": ollama_models,
             "search_tiers": cfg.SEARCH_TIERS,
             "chunk_strategies": cfg.CHUNK_STRATEGIES,
+            "output_languages": cfg.OUTPUT_LANGUAGES,
             "is_custom": is_custom,
             "saved": saved,
         },
@@ -55,6 +56,8 @@ async def save_settings(
     chunk_size: int = Form(500),
     chunk_overlap: int = Form(100),
     obsidian_sync: str = Form(""),
+    output_language: str = Form("ko"),
+    heading_original_language: str = Form(""),
 ):
     cfg.save_runtime_settings(
         llm_provider=llm_provider,
@@ -70,6 +73,8 @@ async def save_settings(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
         obsidian_sync=(obsidian_sync == "on"),
+        output_language=output_language,
+        heading_original_language=(heading_original_language == "on"),
     )
     return RedirectResponse("/settings?saved=1", status_code=303)
 
