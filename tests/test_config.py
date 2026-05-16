@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 
@@ -114,7 +115,7 @@ def test_save_runtime_settings_applies_env(isolated_config, monkeypatch):
     assert os.environ["WIKI_MODEL"] == "gpt-4o"
     assert os.environ["WIKI_CHUNK_STRATEGY"] == "section"
     assert os.environ["WIKI_OUTPUT_LANGUAGE"] == "ko"
-    assert os.environ["WIKI_HEADING_ORIGINAL_LANGUAGE"] == "off"
+    assert os.environ["WIKI_HEADING_ORIGINAL_LANGUAGE"] == "on"
 
 
 def test_save_runtime_settings_custom_model(isolated_config):
@@ -209,3 +210,43 @@ def test_save_runtime_settings_applies_language_env(isolated_config):
     assert saved["heading_original_language"] is True
     assert os.environ["WIKI_OUTPUT_LANGUAGE"] == "en"
     assert os.environ["WIKI_HEADING_ORIGINAL_LANGUAGE"] == "on"
+
+
+def test_model_test_label_uses_temporary_ollama_env(monkeypatch):
+    from wiki_web.routers import settings as settings_router
+
+    monkeypatch.setenv("WIKI_OLLAMA_BASE_URL", "http://localhost:11434")
+    monkeypatch.delenv("WIKI_MODEL", raising=False)
+
+    def fake_tags(base_url=None, timeout=1):
+        import os
+        base_url = base_url or os.environ.get("WIKI_OLLAMA_BASE_URL")
+        if base_url == "http://remote.example:11434":
+            return ["llama3"]
+        if base_url == "http://localhost:11434":
+            return ["gemma4:e4b-it-q4_K_M"]
+        return []
+
+    seen: dict[str, str] = {}
+
+    def fake_call(prompt: str, **kwargs):
+        seen["model"] = kwargs["model"]
+        return "OK"
+
+    monkeypatch.setattr("wiki_cli.llm.ollama_tags", fake_tags)
+    monkeypatch.setattr("wiki_cli.llm.call", fake_call)
+
+    response = asyncio.run(settings_router._test_model(None, {
+        "llm_provider": "ollama",
+        "model": "",
+        "ollama_base_url": "http://remote.example:11434",
+        "openai_api_key": "",
+        "anthropic_api_key": "",
+        "google_api_key": "",
+        "openrouter_api_key": "",
+    }))
+
+    body = response.body.decode("utf-8")
+    assert seen["model"] == "ollama/llama3"
+    assert "연결 성공: ollama/llama3" in body
+    assert "gemma4:e4b-it-q4_K_M" not in body

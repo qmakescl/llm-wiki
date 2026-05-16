@@ -17,7 +17,7 @@ def output_language() -> str:
 
 
 def heading_original_language() -> bool:
-    return os.environ.get("WIKI_HEADING_ORIGINAL_LANGUAGE", "off").strip().lower() in {
+    return os.environ.get("WIKI_HEADING_ORIGINAL_LANGUAGE", "on").strip().lower() in {
         "1",
         "true",
         "yes",

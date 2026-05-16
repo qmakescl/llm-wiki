@@ -84,7 +84,7 @@ def test_render_source_page_from_structured_result(monkeypatch):
 
     assert meta["title"] == "paper"
     assert meta["type"] == "source"
-    assert "## 요약" in body
+    assert "## Summary" in body
     assert "[[OpenAI]]" in body
     assert "Claim A" in body
 

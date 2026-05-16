@@ -285,3 +285,55 @@ uv run pytest tests/test_smoke.py
 tests/test_documents_router.py tests/test_progress.py: 5 passed
 tests/test_smoke.py: 2 passed
 ```
+
+## 추가 변경: LLM 연결 테스트 성공 메시지 모델명 불일치 수정
+
+설정 화면에서 Ollama 서버 URL을 바꾼 뒤 연결 테스트를 실행하면 실제 테스트 호출은 임시 설정을 적용해 수행하지만, 성공 메시지의 모델명은 임시 설정이 해제된 뒤 다시 계산하고 있었다.
+
+그 결과 `http://100.111.143.12:11434` 같은 원격 Ollama 서버를 테스트했는데도, 이전 환경 또는 로컬 Ollama에서 감지한 모델명이 `연결 성공: ...` 메시지에 표시될 수 있었다.
+
+수정:
+
+- 연결 테스트에서 임시 설정 적용 중 `resolved_model`을 먼저 확정한다.
+- 실제 `llm.call()`에도 그 `resolved_model`을 전달한다.
+- 성공 메시지도 같은 `resolved_model`을 표시한다.
+
+### 추가 수정 파일
+
+| 파일 | 변경 내용 |
+|---|---|
+| `wiki_web/routers/settings.py` | 연결 테스트 호출 모델과 성공 메시지 모델명을 동일한 resolved model로 고정 |
+| `tests/test_config.py` | 임시 Ollama URL에서 감지한 모델명이 성공 메시지에 표시되는지 회귀 테스트 추가 |
+| `CHANGELOG.md` | 본 수정 기록 |
+| `docs/fix/2026-05-16-ingest-completion.md` | 본 추가 변경 기록 |
+
+### 추가 검증
+
+```bash
+uv run pytest tests/test_config.py tests/test_llm_runtime.py
+uv run pytest tests/test_smoke.py
+```
+
+결과:
+
+```text
+tests/test_config.py tests/test_llm_runtime.py: 20 passed
+tests/test_smoke.py: 2 passed
+```
+
+## 추가 변경: Heading 원문 언어 사용 기본값 변경
+
+언어 설정의 `Heading은 원문 언어 사용` 옵션을 기본 선택 상태로 변경했다.
+
+수정:
+
+- 새 설정의 기본값을 `heading_original_language: true`로 변경
+- 환경변수 `WIKI_HEADING_ORIGINAL_LANGUAGE`가 없을 때도 기본 `on`으로 해석
+- `/settings`, `/admin` UI에서 기존 설정값이 없으면 checkbox가 기본 checked 되도록 변경
+- README 예시 설정과 설명을 기본 enabled 기준으로 갱신
+
+### 추가 검증
+
+```bash
+uv run pytest tests/test_config.py tests/test_language.py tests/test_structured_ingest.py
+```

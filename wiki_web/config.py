@@ -34,7 +34,7 @@ DEFAULTS: dict = {
     "chunk_overlap": 100,
     "obsidian_sync": True,
     "output_language": "ko",
-    "heading_original_language": False,
+    "heading_original_language": True,
 }
 
 LLM_PROVIDERS = [
@@ -165,7 +165,7 @@ def apply_env(cfg: dict) -> None:
         output_language = "ko"
     os.environ["WIKI_OUTPUT_LANGUAGE"] = output_language
     os.environ["WIKI_HEADING_ORIGINAL_LANGUAGE"] = (
-        "on" if cfg.get("heading_original_language", False) else "off"
+        "on" if cfg.get("heading_original_language", True) else "off"
     )
 
 
@@ -325,7 +325,7 @@ def save_runtime_settings(
     chunk_overlap: int,
     obsidian_sync: bool = True,
     output_language: str = "ko",
-    heading_original_language: bool = False,
+    heading_original_language: bool = True,
 ) -> dict:
     """`/settings`와 `/admin/settings`가 공유하는 저장 로직.
 

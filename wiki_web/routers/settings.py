@@ -147,14 +147,15 @@ def _model_presets_with_ollama(c: dict) -> tuple[list[tuple[str, str]], list[str
 async def _test_model(model_id: str | None, test_cfg: dict) -> HTMLResponse:
     try:
         with _temporary_llm_env(test_cfg):
+            resolved_model = llm.resolve_model(model_id)
             result = await asyncio.to_thread(
                 llm.call,
                 "Reply with OK only.",
-                model=model_id,
+                model=resolved_model,
                 max_tokens=10,
                 temperature=0,
             )
-        model_label = escape(llm.resolve_model(model_id))
+        model_label = escape(resolved_model)
         return HTMLResponse(
             f'<span class="test-ok">✓ 연결 성공: {model_label} → {escape(result[:50])}</span>'
         )

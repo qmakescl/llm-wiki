@@ -21,6 +21,8 @@
 
 - Fixed raw file list progress UI staying on `추출 진행 중...` after ingest completion.
 - SSE `done` events now replace the per-file progress control with a complete badge, or with a retry control on failure.
+- Fixed LLM connection test success message showing a model resolved from the previous environment instead of the temporary form settings.
+- Changed `Heading은 원문 언어 사용` to be enabled by default.
 
 ### Verified
 

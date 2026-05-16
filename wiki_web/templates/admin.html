@@ -419,7 +419,7 @@ function updateAdminProviderFields() {
           {% endfor %}
           <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; font-size:13.5px; margin-top:4px; padding-top:10px; border-top:1px solid var(--border)">
             <input type="checkbox" name="heading_original_language" value="on"
-                   {% if cfg.get('heading_original_language', false) %}checked{% endif %}
+                   {% if cfg.get('heading_original_language', true) %}checked{% endif %}
                    style="width:15px; height:15px; accent-color:var(--accent); margin-top:2px; cursor:pointer; flex-shrink:0">
             <span>Heading은 원문 언어 사용</span>
           </label>

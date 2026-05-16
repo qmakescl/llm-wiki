@@ -5,15 +5,15 @@ from __future__ import annotations
 from wiki_cli import language
 
 
-def test_language_policy_defaults_to_korean_body_and_korean_headings(monkeypatch):
+def test_language_policy_defaults_to_korean_body_and_original_headings(monkeypatch):
     monkeypatch.delenv("WIKI_OUTPUT_LANGUAGE", raising=False)
     monkeypatch.delenv("WIKI_HEADING_ORIGINAL_LANGUAGE", raising=False)
 
     policy = language.language_policy()
 
     assert "body prose in Korean" in policy
-    assert "headings in Korean" in policy
-    assert language.heading_label("요약", "Summary") == "요약"
+    assert "headings in the source/original language" in policy
+    assert language.heading_label("요약", "Summary") == "Summary"
 
 
 def test_language_policy_can_use_english_output(monkeypatch):
